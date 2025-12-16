@@ -327,24 +327,24 @@ flowchart LR
 - **Single vs Multi:** 
   - 처음부터 Swarm 등 복잡한 Multi-Agent로 시작하지 마십시오. **Single Agent**로 시작하고, 복잡도가 증가하면 **Supervisor** 패턴으로 분리하는 것이 운영 및 디버깅에 유리합니다.
 
-  ```mermaid
-  graph TD
-      User((User)) --> Supervisor{Supervisor Agent}
-      
-      subgraph "Specialized Agents"
-          Supervisor -->|Delegate| Research[Research Agent]
-          Supervisor -->|Delegate| Coding[Coding Agent]
-          Supervisor -->|Delegate| Review[Review Agent]
-      end
-      
-      Research -->|Result| Supervisor
-      Coding -->|Result| Supervisor
-      Review -->|Result| Supervisor
-      
-      Supervisor -->|Final Answer| User
-      
-      style Supervisor fill:#f9f,stroke:#333,stroke-width:2px
-  ```
+```mermaid
+graph TD
+    User((User)) --> Supervisor{Supervisor Agent}
+    
+    subgraph "Specialized Agents"
+        Supervisor -->|Delegate| Research[Research Agent]
+        Supervisor -->|Delegate| Coding[Coding Agent]
+        Supervisor -->|Delegate| Review[Review Agent]
+    end
+    
+    Research -->|Result| Supervisor
+    Coding -->|Result| Supervisor
+    Review -->|Result| Supervisor
+    
+    Supervisor -->|Final Answer| User
+    
+    style Supervisor fill:#f9f,stroke:#333,stroke-width:2px
+```
 
 - **Worker & Queue:**
   - 요청이 끊겨도 작업이 수행되어야 한다면 **Celery**나 **Dramatiq** 같은 비동기 워커를 사용하십시오.
@@ -379,20 +379,20 @@ flowchart LR
 - **Fallback Strategy:** 특정 리전이나 모델 장애 시 자동으로 다른 모델/리전으로 전환되는 로직(Model Router)을 구현하십시오.
   > *"CSP 네트워크 상태에 따라 LLM connection error가 발생할 경우, 다른 Region에 LLM을 호출하여 application 동작이 가능하도록 해야 할 수 있다"*
 
-  ```mermaid
-  sequenceDiagram
-      participant App
-      participant Primary as Primary Model (GPT-4)
-      participant Fallback as Fallback Model (GPT-3.5/Haiku)
-      
-      App->>Primary: Request
-      alt Success
-          Primary-->>App: Response
-      else Timeout / Error
-          App->>Fallback: Retry Request (Fallback)
-          Fallback-->>App: Response (Degraded but working)
-      end
-  ```
+```mermaid
+sequenceDiagram
+    participant App
+    participant Primary as Primary Model (GPT-4)
+    participant Fallback as Fallback Model (GPT-3.5/Haiku)
+    
+    App->>Primary: Request
+    alt Success
+        Primary-->>App: Response
+    else Timeout / Error
+        App->>Fallback: Retry Request (Fallback)
+        Fallback-->>App: Response (Degraded but working)
+    end
+```
 
 - **Offline Support:** 읽기 전용 기능은 PWA로 지원하되, 오프라인 생성 기능(WebLLM 등)은 복잡도가 높으므로 신중히 결정하십시오.
 
