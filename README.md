@@ -4,13 +4,11 @@
 문서(`scenarios/`)로 패턴을 이해하고, 코드(`ax_advanced_class/`)로 구현한 뒤, 테스트(`tests/`)로 검증하는 형태로 구성되어 있습니다.
 
 ### Directory guide (무슨 폴더가 무슨 용도인가?)
-
 - **`ax_advanced_class/`**: 실습용 파이썬 구현 코드(“정답”이 아니라 **학생이 채워 넣는 과제 코드**)
   - **`rolling_window_middleware.py`**: 시나리오 1) Rolling Window — 토큰 예산 내에서 오래된 메시지를 제거하되 **System(0번) + 최신 메시지는 보존**
   - **`summarizer_middleware.py`**: 시나리오 2) Auto Summarizer — 오래된 히스토리를 요약으로 압축(계층형 메모리)
   - **`tool_output_trimmer.py`**: 시나리오 3) Tool Output Trimmer — 장황한 툴 JSON을 스키마 기반으로 핵심만 남김(Observation compaction)
   - **`tool_selector.py`**: 시나리오 7) Tool Selector — 질의 의도에 따라 **필요한 툴만 노출/선택**(least privilege + context budget)
-  - **`materials/`**: 강의/노트(설명 자료)
   - **`scenarios/`**: 1~9 시나리오 문서(원칙 → 요구사항 → 실패모드 → 테스트 아이디어)
   - **`data/`**: (필요 시) 실습용 입력/예시 데이터 보관 장소
 
