@@ -1,4 +1,4 @@
-from typing import Annotated, TypedDict, Literal
+from typing import Annotated, TypedDict, Literal, NotRequired
 from langgraph.graph import END, StateGraph, START
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, model_validator, create_model, ConfigDict
@@ -14,8 +14,8 @@ from langchain_core.prompts import MessagesPlaceholder
 
 class OrchestratorState(TypedDict):
     messages: Annotated[list[BaseMessage], operator.add]
-    previous_node: str = "START"
-    next: str
+    previous_node: NotRequired[str]
+    next: NotRequired[str]
 
 
 class Orchestrator(BaseModel):
@@ -32,9 +32,6 @@ class Orchestrator(BaseModel):
 
         def worker_node(state: OrchestratorState, graph: CompiledStateGraph):
             result = graph.invoke({"messages": state["messages"]})
-            # result is a dict with the state schema of the worker agent
-            # We assume worker agents return a dict with "messages" key
-            # We take the last message which is the response
             return {
                 "messages": [result["messages"][-1]],
                 "previous_node": state["next"],
@@ -65,7 +62,7 @@ class Orchestrator(BaseModel):
 
         def orchestrator_node(state: OrchestratorState) -> OrchestratorState:
             print(state)
-            if state["previous_node"] != "START":
+            if state.get("previous_node", "START") != "START":
                 return {"next": END}
             result = orchestrator.invoke({"messages": state["messages"]})
             return {"messages": state["messages"], "next": result.next.value}
