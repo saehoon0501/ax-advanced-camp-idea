@@ -2,6 +2,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import BaseMessage
 from typing import List, Any
 
+
 class _CharTokenizer:
     """Deterministic tokenizer for tests: 1 token per character."""
 
@@ -13,10 +14,11 @@ class RollingWindowMiddleware(AgentMiddleware):
     """
     Middleware to limit the number of tokens in the conversation history.
     """
+
     def __init__(self, max_tokens: int):
         self.max_tokens = max_tokens
         self.tokenizer = _CharTokenizer()
-        
+
     def _prune_messages(self, history: List[BaseMessage]) -> List[BaseMessage]:
         """
         요구사항
@@ -29,26 +31,31 @@ class RollingWindowMiddleware(AgentMiddleware):
             - 삭제는 **오래된 순서부터**
         """
 
-        # if not history:
-        #     return history
+        if not history:
+            return history
 
-        # system = history[0]
-        # tail = list(history[1:])  # deletion candidates (oldest -> newest)
+        system = history[0]
+        tail = list(history[1:])  # deletion candidates (oldest -> newest)
 
-        # def count_tokens(messages: List[BaseMessage]) -> int:
-        #     return sum(len(self.tokenizer.encode(m.content)) for m in messages)
+        def count_tokens(messages: List[BaseMessage]) -> int:
+            return sum(len(self.tokenizer.encode(m.content)) for m in messages)
 
-        # if count_tokens([system] + tail) <= self.max_tokens:
-        #     return history
+        if count_tokens([system] + tail) <= self.max_tokens:
+            return history
 
         # Prune oldest messages first, but never drop the system message or the latest message.
-        # while len(tail) > 1 and count_tokens([system] + tail) > self.max_tokens:
-            # tail.pop(0)
+        while len(tail) > 1 and count_tokens([system] + tail) > self.max_tokens:
+            tail.pop(0)
 
         # If even [system] + [latest] exceeds the budget, we still preserve both (per invariants).
-        # return [system] + tail
-        return history
-    
+        return [system] + tail
+
     def before_model(self, state, runtime) -> dict[str, Any] | None:
-        state.messages = self._prune_messages(state.messages)
+        if isinstance(state, dict):
+            # If state is a dict, we need to modify the messages key
+            if "messages" in state:
+                state["messages"] = self._prune_messages(state["messages"])
+        else:
+            # If state is an object (AgentState), we can access attribute
+            state.messages = self._prune_messages(state.messages)
         return state
