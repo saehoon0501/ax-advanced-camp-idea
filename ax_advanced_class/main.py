@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     _iterator = workflow.stream(
         {
-            "messages": [HumanMessage(content="Hello, how are you?")],
+            "messages": [HumanMessage(content="SE/초급에 대한 학습 커리큘럼 생성해줘")],
             "previous_node": "START",
         }
     )
