@@ -61,7 +61,6 @@ class Orchestrator(BaseModel):
         ) | llm.with_structured_output(Router)
 
         def orchestrator_node(state: OrchestratorState) -> OrchestratorState:
-            print(state)
             if state.get("previous_node", "START") != "START":
                 return {"next": END}
             result = orchestrator.invoke({"messages": state["messages"]})
