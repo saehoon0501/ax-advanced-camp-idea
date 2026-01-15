@@ -2,12 +2,20 @@ from __future__ import annotations
 from typing import Dict, Optional, Any, TypedDict
 from langchain_aws.chat_models import ChatBedrock
 from dataclasses import dataclass, field
+from botocore.config import Config as BotoConfig
 import functools
 
 
 # TODO: 모델 변경 시 수정 필요
 DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-20250514-v1:0"
 DEFAULT_REGION = "us-east-1"
+
+# Timeout configuration for long-running agent tasks
+DEFAULT_BOTO_CONFIG = BotoConfig(
+    read_timeout=300,  # 5 minutes for reading response
+    connect_timeout=60,  # 1 minute for connection
+    retries={"max_attempts": 3},
+)
 
 
 @dataclass(frozen=True)
@@ -21,7 +29,6 @@ class LLMConfig:
             "temperature": 0.8,
             "top_p": 0.9,
             "anthropic_version": "bedrock-2023-05-31",
-            # "timeout": 60, # 필요 시
         }
     )
 
@@ -44,6 +51,7 @@ class BedrockClient:
             region_name=config.region_name,
             streaming=config.streaming,
             model_kwargs=config.model_kwargs,
+            config=DEFAULT_BOTO_CONFIG,
         )
 
     @functools.lru_cache(maxsize=8)
