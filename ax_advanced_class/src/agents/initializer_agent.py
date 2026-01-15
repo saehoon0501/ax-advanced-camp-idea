@@ -2,7 +2,7 @@
 Initializer Agent
 
 Responsible for setting up the foundation for a long-running project.
-Uses LangGraph's create_react_agent for the agent loop.
+Uses LangGraph's create_agent for the agent loop.
 
 Based on Anthropic's article - The Initializer Agent:
 - Sets up the environment on first run
@@ -14,7 +14,7 @@ Based on Anthropic's article - The Initializer Agent:
 
 from typing import Any, Optional, Sequence, Callable
 
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import create_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
@@ -26,7 +26,7 @@ def create_initializer_agent(
     tools: Optional[Sequence[BaseTool | Callable | dict[str, Any]]] = None,
 ) -> CompiledStateGraph:
     """
-    Create an Initializer Agent using LangGraph's create_react_agent.
+    Create an Initializer Agent using LangGraph's create_agent.
 
     The Initializer Agent is responsible for:
     1. Analyzing the user's project request
@@ -43,7 +43,7 @@ def create_initializer_agent(
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
-    return create_react_agent(
+    return create_agent(
         model=llm,
         tools=tools or [],
         prompt=INITIALIZER_SYSTEM_PROMPT,

@@ -2,7 +2,7 @@
 Coding Agent
 
 Responsible for incrementally implementing features one at a time.
-Uses LangGraph's create_react_agent for the agent loop.
+Uses LangGraph's create_agent for the agent loop.
 
 Based on Anthropic's article - The Coding Agent:
 - Operates with incremental feature-by-feature progression
@@ -13,7 +13,7 @@ Based on Anthropic's article - The Coding Agent:
 
 from typing import Any, Optional, Sequence, Callable
 
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import create_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
@@ -25,7 +25,7 @@ def create_coding_agent(
     tools: Optional[Sequence[BaseTool | Callable | dict[str, Any]]] = None,
 ) -> CompiledStateGraph:
     """
-    Create a Coding Agent using LangGraph's create_react_agent.
+    Create a Coding Agent using LangGraph's create_agent.
 
     The Coding Agent is responsible for:
     1. Reading current state (git logs, progress file, feature list)
@@ -41,7 +41,7 @@ def create_coding_agent(
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
-    return create_react_agent(
+    return create_agent(
         model=llm,
         tools=tools or [],
         prompt=CODING_AGENT_SYSTEM_PROMPT,
