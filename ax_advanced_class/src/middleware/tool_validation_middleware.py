@@ -21,7 +21,7 @@ from ax_advanced_class.src.config.tool_permission_config import (
 )
 
 
-def validate_path_safety(path: str, config: PermissionConfig) -> str:
+def _validate_path_safety(path: str, config: PermissionConfig) -> str:
     """
     Validate and normalize a path against permission config.
     Returns normalized path or raises PermissionDeniedError.
@@ -57,7 +57,7 @@ def validate_path_safety(path: str, config: PermissionConfig) -> str:
     return normalized
 
 
-def validate_command_safety(command: str, config: PermissionConfig) -> None:
+def _validate_command_safety(command: str, config: PermissionConfig) -> None:
     """
     Validate a shell command against permission config.
     Raises PermissionDeniedError if invalid.
@@ -137,8 +137,8 @@ class ToolValidationMiddleware(AgentMiddleware):
     Uses a class to hold configuration state.
     """
 
-    def __init__(self, config: Optional[PermissionConfig] = None):
-        self.config = config or PermissionConfig()
+    def __init__(self, permission_config: PermissionConfig):
+        self.permission_config = permission_config
 
     def wrap_tool_call(
         self,
@@ -157,15 +157,15 @@ class ToolValidationMiddleware(AgentMiddleware):
             if tool_name in ["bash", "shell_run", "shell_script"]:
                 # 1. Validate Command
                 if "command" in args:
-                    validate_command_safety(args["command"], self.config)
+                    _validate_command_safety(args["command"], self.config)
 
                 # 2. Validate Script Path
                 if "script_path" in args:
-                    validate_path_safety(args["script_path"], self.config)
+                    _validate_path_safety(args["script_path"], self.config)
 
                 # 3. Validate CWD
                 if "cwd" in args and args["cwd"]:
-                    validate_path_safety(args["cwd"], self.config)
+                    _validate_path_safety(args["cwd"], self.config)
 
             # --- File Tool Validation ---
             elif tool_name in ["read", "write", "edit", "glob", "grep"]:
@@ -176,7 +176,7 @@ class ToolValidationMiddleware(AgentMiddleware):
                         path = os.path.join(self.config.workspace_root, path)
 
                     # Validate the fully resolved path
-                    normalized_path = validate_path_safety(path, self.config)
+                    normalized_path = _validate_path_safety(path, self.config)
 
                     # Update request args with safe normalized path
                     args["path"] = normalized_path
