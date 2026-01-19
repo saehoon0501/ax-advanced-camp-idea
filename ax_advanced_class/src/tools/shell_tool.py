@@ -1,41 +1,38 @@
 """
 Shell Execution Tool
 
-Provides general shell execution with permission checks.
-Uses the base shell executor for all permission validation.
+Provides unified access to system shell commands.
+This tool covers:
+- System Navigation (ls, cd, pwd)
+- Git Operations (git status, add, commit, push, etc.)
+- Script Execution (bash scripts, python scripts)
+- Package Management (pip, npm, uv)
 """
 
+import os
+import subprocess
 from typing import Optional
 
 from langchain_core.tools import tool
 
-from ax_advanced_class.src.tools.base import (
-    BaseShellExecutor,
-    PermissionConfig,
-    PermissionLevel,
-    PermissionDeniedError,
+from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
+from ax_advanced_class.src.middleware.tool_validation_middleware import (
+    ToolValidationMiddleware,
 )
 
 
 class ShellTool:
     """
-    General shell execution tool with permission control.
+    Unified shell execution tool.
 
-    Provides:
-    - run: Execute any shell command (with permission checks)
-    - run_script: Execute a script file
-    - get_cwd: Get current working directory
-
-    All commands are validated against:
-    - Blocked commands list
-    - Blocked patterns (regex)
-    - Permission level restrictions
-    - Path restrictions (for file operations)
+    Serves as the primary interface for all command-line operations.
+    Security and validation are handled by ToolValidationMiddleware.
     """
 
     def __init__(self, config: Optional[PermissionConfig] = None):
         self.config = config or PermissionConfig()
-        self.executor = BaseShellExecutor(config=self.config)
+        # Create middleware instance to be used by agents
+        self.validation_middleware = ToolValidationMiddleware(self.config)
 
     def run(
         self,
@@ -45,148 +42,67 @@ class ShellTool:
     ) -> dict:
         """
         Execute a shell command.
-
-        Args:
-            command: The command to execute
-            cwd: Working directory (defaults to workspace)
-            timeout: Command timeout in seconds
-
-        Returns:
-            Dict with 'success', 'stdout', 'stderr', 'returncode'
         """
-        return self.executor.execute_safe(command, cwd=cwd, timeout=timeout)
+        work_dir = cwd if cwd else self.config.workspace_root
 
-    def run_script(
-        self,
-        script_path: str,
-        args: str = "",
-        cwd: Optional[str] = None,
-        timeout: int = 120,
-    ) -> dict:
-        """
-        Execute a script file.
+        # Ensure workspace exists
+        if not os.path.exists(work_dir):
+            try:
+                os.makedirs(work_dir, exist_ok=True)
+            except OSError:
+                pass
 
-        Args:
-            script_path: Path to the script
-            args: Arguments to pass to the script
-            cwd: Working directory
-            timeout: Script timeout in seconds
-
-        Returns:
-            Dict with 'success', 'stdout', 'stderr', 'returncode'
-        """
-        # Validate script path
         try:
-            validated_path = self.executor.validate_path(script_path)
-        except PermissionDeniedError as e:
+            # shell=True allows complex commands, pipes (if permitted), and shell expansion
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=work_dir,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+            )
+
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode,
+            }
+        except subprocess.TimeoutExpired:
             return {
                 "success": False,
                 "stdout": "",
-                "stderr": str(e),
+                "stderr": f"Command timed out after {timeout} seconds",
                 "returncode": -1,
             }
-
-        command = f"bash {validated_path}"
-        if args:
-            command += f" {args}"
-
-        return self.executor.execute_safe(command, cwd=cwd, timeout=timeout)
-
-    def get_cwd(self) -> dict:
-        """
-        Get current working directory.
-
-        Returns:
-            Dict with 'success', 'cwd'
-        """
-        return {
-            "success": True,
-            "cwd": self.config.workspace_root,
-        }
-
-    def which(self, program: str) -> dict:
-        """
-        Find the path to a program.
-
-        Args:
-            program: Program name
-
-        Returns:
-            Dict with 'success', 'path'
-        """
-        result = self.executor.execute_safe(f"which {program}")
-        if result["success"]:
+        except Exception as e:
             return {
-                "success": True,
-                "path": result["stdout"].strip(),
+                "success": False,
+                "stdout": "",
+                "stderr": f"Execution error: {str(e)}",
+                "returncode": -1,
             }
-        return {
-            "success": False,
-            "error": f"Program not found: {program}",
-        }
-
-    def env(self, var: Optional[str] = None) -> dict:
-        """
-        Get environment variable(s).
-
-        Args:
-            var: Specific variable name (or None for all)
-
-        Returns:
-            Dict with 'success', 'value' or 'env'
-        """
-        if var:
-            result = self.executor.execute_safe(f"echo ${var}")
-            if result["success"]:
-                return {
-                    "success": True,
-                    "variable": var,
-                    "value": result["stdout"].strip(),
-                }
-        else:
-            result = self.executor.execute_safe("env")
-            if result["success"]:
-                env_dict = {}
-                for line in result["stdout"].strip().split("\n"):
-                    if "=" in line:
-                        key, value = line.split("=", 1)
-                        env_dict[key] = value
-                return {
-                    "success": True,
-                    "env": env_dict,
-                }
-
-        return {
-            "success": False,
-            "error": result.get("stderr", "Failed to get environment"),
-        }
 
     def get_langchain_tools(self) -> list:
         """
         Get LangChain tool wrappers for this tool.
-
-        Returns:
-            List of LangChain tools
         """
+
         @tool
-        def shell_run(command: str, timeout: int = 60) -> str:
+        def bash(command: str, timeout: int = 60) -> str:
             """
-            Execute a shell command.
+            Execute a shell command (Bash).
 
-            Use this for running build commands, tests, starting servers, etc.
-            Commands are restricted to the workspace directory.
-
-            Blocked operations:
-            - Destructive system commands (rm -rf /, etc.)
-            - Commands outside workspace
-            - Dangerous patterns (curl|bash, eval, etc.)
+            Use this tool for:
+            - File system operations: ls, cd, pwd, mkdir, mv, cp
+            - Git operations: git status, add, commit, push, pull, checkout
+            - Running scripts: ./script.sh, python main.py
+            - System tools: grep, find, cat (for small checks)
 
             Args:
-                command: The shell command to execute
+                command: The bash command to execute
                 timeout: Command timeout in seconds (default: 60)
-
-            Returns:
-                Command output (stdout + stderr) or error message
             """
             result = self.run(command, timeout=timeout)
             if result["success"]:
@@ -196,48 +112,4 @@ class ShellTool:
                 return output or "Command completed successfully"
             return f"Error (exit code {result['returncode']}): {result['stderr']}"
 
-        @tool
-        def shell_script(script_path: str, args: str = "") -> str:
-            """
-            Execute a bash script file.
-
-            Args:
-                script_path: Path to the script (relative to workspace)
-                args: Arguments to pass to the script
-
-            Returns:
-                Script output or error message
-            """
-            result = self.run_script(script_path, args)
-            if result["success"]:
-                return result["stdout"] or "Script completed successfully"
-            return f"Error: {result['stderr']}"
-
-        @tool
-        def shell_pwd() -> str:
-            """
-            Get the current working directory (workspace root).
-
-            Returns:
-                Current working directory path
-            """
-            result = self.get_cwd()
-            return result["cwd"]
-
-        @tool
-        def shell_which(program: str) -> str:
-            """
-            Find the path to a program.
-
-            Args:
-                program: Program name to find
-
-            Returns:
-                Path to program or error message
-            """
-            result = self.which(program)
-            if result["success"]:
-                return result["path"]
-            return f"Error: {result['error']}"
-
-        return [shell_run, shell_script, shell_pwd, shell_which]
+        return [bash]

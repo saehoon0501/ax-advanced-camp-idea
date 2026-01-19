@@ -1,384 +1,242 @@
 """
-File Operation Tool
+File Operation Tools
 
-Provides file read/write/delete operations with path restrictions.
-All operations are restricted to the workspace directory.
+Provides specialized tools for file manipulation:
+- read: Read file contents (text)
+- write: Create or overwrite files
+- edit: Exact string replacement in files
+- glob: Find files by pattern
+- grep: Search file contents with regex
 """
 
 import os
 import json
-from typing import Optional, Literal
-from pathlib import Path
+from typing import Optional, List
+import subprocess
 
-from langchain_core.tools import tool, BaseTool
+from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from ax_advanced_class.src.tools.base import (
-    BaseShellExecutor,
+from ax_advanced_class.src.config.tool_permission_config import (
     PermissionConfig,
-    PermissionLevel,
-    PermissionDeniedError,
 )
-
-
-class FileReadInput(BaseModel):
-    """Input for file read operation."""
-    path: str = Field(description="Path to the file to read (relative to workspace)")
-    encoding: str = Field(default="utf-8", description="File encoding")
-
-
-class FileWriteInput(BaseModel):
-    """Input for file write operation."""
-    path: str = Field(description="Path to the file to write (relative to workspace)")
-    content: str = Field(description="Content to write to the file")
-    encoding: str = Field(default="utf-8", description="File encoding")
-    create_dirs: bool = Field(default=True, description="Create parent directories if needed")
-
-
-class FileDeleteInput(BaseModel):
-    """Input for file delete operation."""
-    path: str = Field(description="Path to the file to delete (relative to workspace)")
-
-
-class FileListInput(BaseModel):
-    """Input for listing directory contents."""
-    path: str = Field(default=".", description="Path to the directory (relative to workspace)")
-    recursive: bool = Field(default=False, description="List recursively")
-    pattern: Optional[str] = Field(default=None, description="Glob pattern to filter files")
 
 
 class FileOperationTool:
     """
-    File operation tool with permission control.
-
-    Provides safe file operations restricted to the workspace directory:
-    - read_file: Read file contents
-    - write_file: Write content to file
-    - delete_file: Delete a file
-    - list_files: List directory contents
-
-    All paths are validated against the workspace root.
+    File operation tools with permission control.
     """
 
-    def __init__(self, config: Optional[PermissionConfig] = None):
-        self.config = config or PermissionConfig()
-        self.executor = BaseShellExecutor(config=self.config)
-
-    def _resolve_path(self, path: str) -> str:
-        """
-        Resolve a path relative to workspace and validate it.
-
-        Args:
-            path: Path (can be relative or absolute)
-
-        Returns:
-            Validated absolute path
-        """
-        # If relative, make it relative to workspace
-        if not os.path.isabs(path):
-            path = os.path.join(self.config.workspace_root, path)
-
-        # Validate the path
-        return self.executor.validate_path(path)
-
-    def read_file(self, path: str, encoding: str = "utf-8") -> dict:
-        """
-        Read file contents.
-
-        Args:
-            path: Path to file (relative to workspace)
-            encoding: File encoding
-
-        Returns:
-            Dict with 'success', 'content' or 'error'
-        """
+    def read_file(self, validated_path: str, encoding: str = "utf-8") -> dict:
+        """Read the contents of a file."""
         try:
-            resolved_path = self._resolve_path(path)
+            if not os.path.exists(validated_path):
+                return {"success": False, "error": f"File not found: {validated_path}"}
 
-            if not os.path.exists(resolved_path):
-                return {
-                    "success": False,
-                    "error": f"File not found: {path}",
-                }
+            if not os.path.isfile(validated_path):
+                return {"success": False, "error": f"Not a file: {validated_path}"}
 
-            if not os.path.isfile(resolved_path):
-                return {
-                    "success": False,
-                    "error": f"Not a file: {path}",
-                }
-
-            with open(resolved_path, "r", encoding=encoding) as f:
+            with open(validated_path, "r", encoding=encoding) as f:
                 content = f.read()
 
-            return {
-                "success": True,
-                "content": content,
-                "path": resolved_path,
-            }
-
-        except PermissionDeniedError as e:
-            return {
-                "success": False,
-                "error": str(e),
-            }
+            return {"success": True, "content": content, "path": validated_path}
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"Read error: {e}",
-            }
+            return {"success": False, "error": str(e)}
 
-    def write_file(
-        self,
-        path: str,
-        content: str,
-        encoding: str = "utf-8",
-        create_dirs: bool = True,
-    ) -> dict:
-        """
-        Write content to file.
-
-        Args:
-            path: Path to file (relative to workspace)
-            content: Content to write
-            encoding: File encoding
-            create_dirs: Create parent directories if needed
-
-        Returns:
-            Dict with 'success', 'path' or 'error'
-        """
-        # Check permission level
-        if self.config.permission_level == PermissionLevel.RESTRICTED:
-            return {
-                "success": False,
-                "error": "Write operations not allowed in RESTRICTED mode",
-            }
-
+    def write_file(self, validated_path: str, content: str) -> dict:
+        """Write content to a file."""
         try:
-            resolved_path = self._resolve_path(path)
+            parent_dir = os.path.dirname(validated_path)
+            if not os.path.exists(parent_dir):
+                os.makedirs(parent_dir, exist_ok=True)
 
-            # Create parent directories if needed
-            if create_dirs:
-                os.makedirs(os.path.dirname(resolved_path), exist_ok=True)
-
-            with open(resolved_path, "w", encoding=encoding) as f:
-                f.write(content)
+            with open(validated_path, "w", encoding="utf-8") as f:
+                bytes_written = f.write(content)
 
             return {
                 "success": True,
-                "path": resolved_path,
-                "bytes_written": len(content.encode(encoding)),
-            }
-
-        except PermissionDeniedError as e:
-            return {
-                "success": False,
-                "error": str(e),
+                "bytes_written": bytes_written,
+                "path": validated_path,
             }
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"Write error: {e}",
-            }
+            return {"success": False, "error": str(e)}
 
-    def delete_file(self, path: str) -> dict:
-        """
-        Delete a file.
-
-        Args:
-            path: Path to file (relative to workspace)
-
-        Returns:
-            Dict with 'success' or 'error'
-        """
-        # Check permission level
-        if self.config.permission_level == PermissionLevel.RESTRICTED:
-            return {
-                "success": False,
-                "error": "Delete operations not allowed in RESTRICTED mode",
-            }
-
+    def edit_file(self, validated_path: str, old_string: str, new_string: str) -> dict:
+        """Replace exact string in file."""
         try:
-            resolved_path = self._resolve_path(path)
+            read_result = self.read_file(validated_path)
+            if not read_result["success"]:
+                return read_result
 
-            if not os.path.exists(resolved_path):
+            content = read_result["content"]
+            if old_string not in content:
                 return {
                     "success": False,
-                    "error": f"File not found: {path}",
+                    "error": "Exact match for `old_string` not found in file. Ensure whitespace matches exactly.",
                 }
 
-            if not os.path.isfile(resolved_path):
+            # Check for multiple occurrences
+            count = content.count(old_string)
+            if count > 1:
                 return {
                     "success": False,
-                    "error": f"Not a file: {path}",
+                    "error": f"Found {count} occurrences of `old_string`. Edit must be unique.",
                 }
 
-            os.remove(resolved_path)
-
-            return {
-                "success": True,
-                "deleted": resolved_path,
-            }
-
-        except PermissionDeniedError as e:
-            return {
-                "success": False,
-                "error": str(e),
-            }
+            new_content = content.replace(old_string, new_string)
+            return self.write_file(validated_path, new_content)
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"Delete error: {e}",
-            }
+            return {"success": False, "error": str(e)}
 
-    def list_files(
-        self,
-        path: str = ".",
-        recursive: bool = False,
-        pattern: Optional[str] = None,
-    ) -> dict:
-        """
-        List directory contents.
-
-        Args:
-            path: Path to directory (relative to workspace)
-            recursive: List recursively
-            pattern: Glob pattern to filter
-
-        Returns:
-            Dict with 'success', 'files' or 'error'
-        """
+    def glob_files(self, validated_search_root: str, pattern: str = "**/*") -> dict:
+        """Find files by glob pattern."""
         try:
-            resolved_path = self._resolve_path(path)
+            # We use python's glob or just list_files logic with pattern
+            # Or assume the user wants recursive search from workspace root
+            # Let's map this to a recursive list_files implementation or use subprocess 'find' via shell if preferred?
+            # Sticking to python for safety.
+            import glob
 
-            if not os.path.exists(resolved_path):
-                return {
-                    "success": False,
-                    "error": f"Directory not found: {path}",
-                }
+            # Ensure pattern is safe? Glob patterns are generally safe-ish but let's constrain to workspace
+            # Glob doesn't strictly respect 'root' arg like walk does easily without chdir.
+            # Safest is to walk and match.
 
-            if not os.path.isdir(resolved_path):
-                return {
-                    "success": False,
-                    "error": f"Not a directory: {path}",
-                }
+            files_list = []
+            import fnmatch
 
-            files = []
-            base_path = Path(resolved_path)
+            for root, _, files in os.walk(validated_search_root):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(full_path, validated_search_root)
 
+                    if fnmatch.fnmatch(rel_path, pattern):
+                        files_list.append(rel_path)
+
+            return {"success": True, "files": files_list}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def grep_files(self, pattern: str, validated_path: str = ".", recursive: bool = True) -> dict:
+        """Search file contents with regex."""
+        try:
+            # Using subprocess grep is faster and standard
+            work_dir = self.config.workspace_root
+            cmd = ["grep", "-n"]  # -n for line numbers
             if recursive:
-                if pattern:
-                    items = base_path.rglob(pattern)
-                else:
-                    items = base_path.rglob("*")
-            else:
-                if pattern:
-                    items = base_path.glob(pattern)
-                else:
-                    items = base_path.iterdir()
+                cmd.append("-r")
+            cmd.extend([pattern, validated_path])
 
-            for item in items:
-                rel_path = item.relative_to(base_path)
-                files.append({
-                    "name": str(rel_path),
-                    "type": "directory" if item.is_dir() else "file",
-                    "size": item.stat().st_size if item.is_file() else None,
-                })
+            # This is a read operation, so it should be allowed generally
+            # But we must validate paths. 'path' arg is relative to workspace.
 
-            return {
-                "success": True,
-                "path": resolved_path,
-                "files": files,
-                "count": len(files),
-            }
+            # Since we have ShellTool for general commands, maybe Grep should be there?
+            # But the user requested "Grep" as a tool alongside "Read/Write".
+            # We can implement it using python to avoid shell injection risks or rely on validated shell.
+            # Let's use python for consistency with "FileOperationTool".
 
-        except PermissionDeniedError as e:
-            return {
-                "success": False,
-                "error": str(e),
-            }
+            import re
+
+            regex = re.compile(pattern)
+            matches = []
+
+            if os.path.isfile(validated_path):
+                # Search single file
+                with open(validated_path, "r", errors="ignore") as f:
+                    for i, line in enumerate(f, 1):
+                        if regex.search(line):
+                            matches.append(f"{validated_path}:{i}:{line.strip()}")
+
+            elif os.path.isdir(validated_path) and recursive:
+                for root, _, files in os.walk(validated_path):
+                    for file in files:
+                        full_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(full_path, work_dir)
+                        try:
+                            with open(full_path, "r", errors="ignore") as f:
+                                for i, line in enumerate(f, 1):
+                                    if regex.search(line):
+                                        matches.append(f"{rel_path}:{i}:{line.strip()}")
+                        except:
+                            continue  # Skip binary/unreadable
+
+            return {"success": True, "matches": matches}
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"List error: {e}",
-            }
+            return {"success": False, "error": str(e)}
 
     def get_langchain_tools(self) -> list:
         """
         Get LangChain tool wrappers for this tool.
-
-        Returns:
-            List of LangChain tools
         """
+
         @tool
-        def read_file(path: str, encoding: str = "utf-8") -> str:
+        def read(validated_path: str, encoding: str = "utf-8") -> str:
             """
-            Read the contents of a file.
+            Read files (including text, code, config).
 
             Args:
                 path: Path to the file (relative to workspace)
                 encoding: File encoding (default: utf-8)
-
-            Returns:
-                File contents or error message
             """
-            result = self.read_file(path, encoding)
+            result = self.read_file(validated_path, encoding)
             if result["success"]:
                 return result["content"]
             return f"Error: {result['error']}"
 
         @tool
-        def write_file(path: str, content: str) -> str:
+        def write(validated_path: str, content: str) -> str:
             """
-            Write content to a file.
+            Create/overwrite files.
 
             Args:
                 path: Path to the file (relative to workspace)
                 content: Content to write
-
-            Returns:
-                Success message or error
             """
-            result = self.write_file(path, content)
+            result = self.write_file(validated_path, content)
             if result["success"]:
                 return f"Successfully wrote {result['bytes_written']} bytes to {result['path']}"
             return f"Error: {result['error']}"
 
         @tool
-        def delete_file(path: str) -> str:
+        def edit(validated_path: str, old_string: str, new_string: str) -> str:
             """
-            Delete a file.
+            Exact string replacement in files.
 
             Args:
-                path: Path to the file (relative to workspace)
-
-            Returns:
-                Success message or error
+                path: Path to the file
+                old_string: The exact string to replace (must be unique in file)
+                new_string: The new string to replace with
             """
-            result = self.delete_file(path)
+            result = self.edit_file(validated_path, old_string, new_string)
             if result["success"]:
-                return f"Successfully deleted {result['deleted']}"
+                return f"Successfully edited {result['path']}"
             return f"Error: {result['error']}"
 
         @tool
-        def list_files(path: str = ".", recursive: bool = False, pattern: str = None) -> str:
+        def glob(pattern: str = "**/*") -> str:
             """
-            List files in a directory.
+            Find files by pattern (e.g., **/*.ts).
 
             Args:
-                path: Directory path (relative to workspace)
-                recursive: Whether to list recursively
-                pattern: Glob pattern to filter files
-
-            Returns:
-                List of files or error
+                pattern: Glob pattern to match
             """
-            result = self.list_files(path, recursive, pattern)
+            result = self.glob_files(pattern)
             if result["success"]:
-                files_str = "\n".join(
-                    f"  {'[D]' if f['type'] == 'directory' else '[F]'} {f['name']}"
-                    for f in result["files"]
-                )
-                return f"Files in {result['path']} ({result['count']} items):\n{files_str}"
+                return json.dumps(result["files"], indent=2)
             return f"Error: {result['error']}"
 
-        return [read_file, write_file, delete_file, list_files]
+        @tool
+        def grep(pattern: str, validated_path: str = ".", recursive: bool = True) -> str:
+            """
+            Search file contents with regex.
+
+            Args:
+                pattern: Regex pattern to search for
+                path: File or directory to search in (default: .)
+                recursive: Search recursively (default: True)
+            """
+            result = self.grep_files(pattern, validated_path, recursive)
+            if result["success"]:
+                return "\n".join(result["matches"]) if result["matches"] else "No matches found."
+            return f"Error: {result['error']}"
+
+        return [read, write, edit, glob, grep]
