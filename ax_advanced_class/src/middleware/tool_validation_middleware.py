@@ -138,7 +138,7 @@ class ToolValidationMiddleware(AgentMiddleware):
     """
 
     def __init__(self, permission_config: PermissionConfig):
-        self.permission_config = permission_config
+        self.config = permission_config
 
     def wrap_tool_call(
         self,
