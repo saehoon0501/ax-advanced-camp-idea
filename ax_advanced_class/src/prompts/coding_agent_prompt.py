@@ -7,7 +7,15 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 The Coding Agent works incrementally on the project, one feature at a time.
 Key insight: "Structure prompts to work on single features within each context
 window, leaving the environment in a clean state."
+
+Prompt Caching Optimization:
+- Static content is placed FIRST (cacheable prefix)
+- Dynamic content from @dynamic_prompt is appended LAST
+- This maximizes cache hits since the prompt prefix remains constant across calls
 """
+
+from langchain.agents.middleware import dynamic_prompt, ModelRequest
+
 
 CODING_AGENT_SYSTEM_PROMPT = """You are a Coding Agent working incrementally on a long-running project.
 
@@ -118,6 +126,84 @@ At session end, summarize:
 5. Notes for next agent
 
 You have access to tools for file operations, git commands, and shell execution. Use them wisely."""
+
+
+# =============================================================================
+# Dynamic Prompt Middleware
+# =============================================================================
+#
+# Uses LangChain's @dynamic_prompt decorator for context-aware prompt generation.
+#
+# Prompt Caching Optimization:
+# - Static content (CODING_AGENT_SYSTEM_PROMPT) is placed FIRST so it can be cached
+# - Dynamic content (feature info, session info) is appended LAST via middleware
+# - This maximizes cache hits since the prompt prefix remains constant across calls
+#
+# Runtime Context Keys (set via agent.invoke config):
+# - feature_id: str
+# - feature_description: str
+# - feature_category: str
+# - feature_priority: str
+# - feature_steps: list[str]
+# - feature_dependencies: list[str]
+# - session_number: int
+# - repository_path: str
+
+
+@dynamic_prompt
+def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
+    """
+    Dynamic prompt middleware for the Coding Agent.
+
+    This middleware appends session-specific context to the static system prompt.
+    The static prompt is cached, while dynamic context varies per invocation.
+
+    Args:
+        request: ModelRequest containing runtime context with feature/session info
+
+    Returns:
+        Complete prompt string with static content first, dynamic content last
+    """
+    # Extract dynamic context from runtime (set via invoke config)
+    ctx = request.runtime.context
+
+    feature_id = ctx.get("feature_id", "")
+    feature_description = ctx.get("feature_description", "")
+    feature_category = ctx.get("feature_category", "")
+    feature_priority = ctx.get("feature_priority", "")
+    feature_steps = ctx.get("feature_steps", [])
+    feature_dependencies = ctx.get("feature_dependencies", [])
+    session_number = ctx.get("session_number", 1)
+    repository_path = ctx.get("repository_path", "./workspace")
+
+    # Format steps as a readable list
+    steps_formatted = "\n".join(f"  - {step}" for step in feature_steps) if feature_steps else "  - No specific steps defined"
+
+    # Format dependencies
+    deps_formatted = ", ".join(feature_dependencies) if feature_dependencies else "None"
+
+    # Build the dynamic portion (placed at the END for cache optimization)
+    dynamic_content = f"""
+
+=== CURRENT SESSION CONTEXT ===
+
+**Feature to Implement:**
+- ID: {feature_id}
+- Description: {feature_description}
+- Category: {feature_category}
+- Priority: {feature_priority}
+- Implementation Steps:
+{steps_formatted}
+- Dependencies: {deps_formatted}
+
+**Session Information:**
+- Session Number: {session_number}
+- Repository: {repository_path}
+
+Start your session by following PHASE 1 (Recovery & Orientation) as described above."""
+
+    # Return: static system prompt (cacheable) + dynamic content (at the end)
+    return CODING_AGENT_SYSTEM_PROMPT + dynamic_content
 
 
 # Legacy export for backward compatibility

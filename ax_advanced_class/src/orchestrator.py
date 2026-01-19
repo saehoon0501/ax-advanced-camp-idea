@@ -162,6 +162,14 @@ class LongRunningOrchestrator:
         self.tools = tools or []
         self.checkpointer = checkpointer or MemorySaver()
 
+        # Create agents as class fields (reused across invocations)
+        # Uses @dynamic_prompt middleware for cache-optimized dynamic prompting
+        from ax_advanced_class.src.agents.initializer_agent import create_initializer_agent
+        from ax_advanced_class.src.agents.coding_agent import create_coding_agent
+
+        self.initializer_agent = create_initializer_agent(self.llm, self.tools)
+        self.coding_agent = create_coding_agent(self.llm, self.tools)
+
         # Build the workflow graph
         self.workflow = self._build_workflow()
 
@@ -312,33 +320,24 @@ class LongRunningOrchestrator:
         2. Create claude-progress.txt for logging completed work
         3. Create feature_list.json with 50-200 granular features
         4. Initial git commit documenting foundational file setup
+
+        Uses @dynamic_prompt middleware - context is passed via runtime.context
         """
-        from ax_advanced_class.src.agents.initializer_agent import create_initializer_agent
+        # Prepare input message (minimal - dynamic content comes from middleware)
+        input_message = HumanMessage(content="Initialize the project.")
 
-        agent = create_initializer_agent(self.llm, self.tools)
+        # Pass dynamic context via config for @dynamic_prompt middleware
+        # The middleware will append project-specific context to the static system prompt
+        agent_config = {
+            "recursion_limit": 100,
+            "context": {
+                "project_name": state.get("project_name", "Unnamed Project"),
+                "project_description": state.get("project_description", "No description provided"),
+                "repository_path": state.get("repository_path", "./workspace"),
+            },
+        }
 
-        # Prepare input for the agent
-        input_message = HumanMessage(
-            content=f"""Initialize the project:
-
-Project Name: {state.get('project_name', 'Unnamed Project')}
-Description: {state.get('project_description', 'No description provided')}
-Repository Path: {state.get('repository_path', './workspace')}
-
-Please perform the following setup tasks:
-1. Break down the project into 50-200 specific, testable features
-2. Create the feature_list.json file with proper structure
-3. Initialize the git repository (if needed)
-4. Create the claude-progress.txt file for session tracking
-5. Create init.sh script for dev server (if applicable)
-
-Remember: Your job is ONLY setup - do not implement features!
-"""
-        )
-
-        # Execute the agent with higher recursion limit for long-running tasks
-        agent_config = {"recursion_limit": 100}
-        result = agent.invoke({"messages": [input_message]}, config=agent_config)
+        result = self.initializer_agent.invoke({"messages": [input_message]}, config=agent_config)
 
         # Extract output
         output = result.get("output", "Initialization complete.")
@@ -375,11 +374,9 @@ Remember: Your job is ONLY setup - do not implement features!
 
         Key insight: "Structure prompts to work on single features within each
         context window, leaving the environment in a clean state"
+
+        Uses @dynamic_prompt middleware - context is passed via runtime.context
         """
-        from ax_advanced_class.src.agents.coding_agent import create_coding_agent
-
-        agent = create_coding_agent(self.llm, self.tools)
-
         # Sync feature list from file first
         repository_path = state.get("repository_path", "./workspace")
         file_feature_list = self._load_feature_list(repository_path)
@@ -402,48 +399,26 @@ Remember: Your job is ONLY setup - do not implement features!
                 "should_continue": False,
             }
 
-        # Prepare input for the agent
-        input_message = HumanMessage(
-            content=f"""Start a new coding session.
+        # Prepare input message (minimal - dynamic content comes from middleware)
+        input_message = HumanMessage(content="Start the coding session.")
 
-=== CURRENT FEATURE ===
-ID: {current_feature.get('id')}
-Description: {current_feature.get('description')}
-Category: {current_feature.get('category')}
-Priority: {current_feature.get('priority')}
-Steps: {current_feature.get('steps')}
-Dependencies: {current_feature.get('dependencies')}
+        # Pass dynamic context via config for @dynamic_prompt middleware
+        # The middleware will append feature/session context to the static system prompt
+        agent_config = {
+            "recursion_limit": 100,
+            "context": {
+                "feature_id": current_feature.get("id", ""),
+                "feature_description": current_feature.get("description", ""),
+                "feature_category": current_feature.get("category", ""),
+                "feature_priority": current_feature.get("priority", ""),
+                "feature_steps": current_feature.get("steps", []),
+                "feature_dependencies": current_feature.get("dependencies", []),
+                "session_number": state.get("session_count", 0) + 1,
+                "repository_path": state.get("repository_path", "./workspace"),
+            },
+        }
 
-=== SESSION INFO ===
-Session Number: {state.get('session_count', 0) + 1}
-Repository: {state.get('repository_path', './workspace')}
-
-=== SESSION LIFECYCLE ===
-PHASE 1 - START:
-1. Run `pwd` to see your working directory
-2. Read git logs: `git log --oneline -10`
-3. Read claude-progress.txt to understand previous work
-4. Read feature_list.json to see feature status
-5. Run init.sh to start dev server
-6. Run smoke test to verify app works
-
-PHASE 2 - WORK:
-1. Implement ONLY this feature
-2. Follow existing code patterns
-3. Write necessary tests
-4. Test end-to-end like a real user
-
-PHASE 3 - END:
-1. Commit changes with clear message
-2. Update claude-progress.txt
-3. Update feature_list.json (set passes=true if complete)
-4. Ensure clean state for next session
-"""
-        )
-
-        # Execute the agent with higher recursion limit for long-running tasks
-        agent_config = {"recursion_limit": 100}
-        result = agent.invoke({"messages": [input_message]}, config=agent_config)
+        result = self.coding_agent.invoke({"messages": [input_message]}, config=agent_config)
 
         # Extract output
         output = result.get("output", "Session complete.")
@@ -477,9 +452,6 @@ PHASE 3 - END:
         """
         feature_list = state.get("feature_list", [])
         completed_ids = {f["id"] for f in feature_list if f.get("passes", False)}
-
-        # Sort by priority
-        priority_order = {"high": 0, "medium": 1, "low": 2}
 
         for priority in ["high", "medium", "low"]:
             for feature in feature_list:

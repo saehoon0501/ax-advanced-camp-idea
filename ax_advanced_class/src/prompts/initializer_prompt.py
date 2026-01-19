@@ -7,7 +7,15 @@ https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agent
 The Initializer Agent sets up the foundation for a long-running project.
 Key insight: "Use structured JSON files (over Markdown) containing 50-200+
 granular features marked as passing/failing."
+
+Prompt Caching Optimization:
+- Static content is placed FIRST (cacheable prefix)
+- Dynamic content from @dynamic_prompt is appended LAST
+- This maximizes cache hits since the prompt prefix remains constant across calls
 """
+
+from langchain.agents.middleware import dynamic_prompt, ModelRequest
+
 
 INITIALIZER_SYSTEM_PROMPT = """You are an Initializer Agent responsible for setting up the foundation for a long-running coding project.
 
@@ -104,6 +112,61 @@ After completing your work, provide a summary:
 4. Recommended starting point for the Coding Agent
 
 You have access to tools for file operations and git commands. Use them to create the required files."""
+
+
+# =============================================================================
+# Dynamic Prompt Middleware
+# =============================================================================
+#
+# Uses LangChain's @dynamic_prompt decorator for context-aware prompt generation.
+#
+# Runtime Context Keys (set via agent.invoke config):
+# - project_name: str
+# - project_description: str
+# - repository_path: str
+
+
+@dynamic_prompt
+def initializer_agent_dynamic_prompt(request: ModelRequest) -> str:
+    """
+    Dynamic prompt middleware for the Initializer Agent.
+
+    This middleware appends project-specific context to the static system prompt.
+    The static prompt is cached, while dynamic context varies per invocation.
+
+    Args:
+        request: ModelRequest containing runtime context with project info
+
+    Returns:
+        Complete prompt string with static content first, dynamic content last
+    """
+    # Extract dynamic context from runtime (set via invoke config)
+    ctx = request.runtime.context
+
+    project_name = ctx.get("project_name", "Unnamed Project")
+    project_description = ctx.get("project_description", "No description provided")
+    repository_path = ctx.get("repository_path", "./workspace")
+
+    # Build the dynamic portion (placed at the END for cache optimization)
+    dynamic_content = f"""
+
+=== PROJECT CONTEXT ===
+
+**Project Name:** {project_name}
+**Description:** {project_description}
+**Repository Path:** {repository_path}
+
+Please perform the following setup tasks:
+1. Break down the project into 50-200 specific, testable features
+2. Create the feature_list.json file with proper structure
+3. Initialize the git repository (if needed)
+4. Create the claude-progress.txt file for session tracking
+5. Create init.sh script for dev server (if applicable)
+
+Remember: Your job is ONLY setup - do not implement features!"""
+
+    # Return: static system prompt (cacheable) + dynamic content (at the end)
+    return INITIALIZER_SYSTEM_PROMPT + dynamic_content
 
 
 # Legacy export for backward compatibility

@@ -9,6 +9,10 @@ Based on Anthropic's article - The Coding Agent:
 - Produces clean, mergeable code at session end
 - Performs comprehensive testing before marking features complete
 - Commits with descriptive messages for git-based checkpointing
+
+Uses @dynamic_prompt middleware for cache-optimized dynamic prompting:
+- Static system prompt is cached (placed first)
+- Dynamic feature/session context is appended via middleware (placed last)
 """
 
 from typing import Any, Optional, Sequence, Callable
@@ -17,12 +21,16 @@ from langgraph.prebuilt import create_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
-from ax_advanced_class.src.prompts.coding_agent_prompt import CODING_AGENT_SYSTEM_PROMPT
+from ax_advanced_class.src.prompts.coding_agent_prompt import (
+    CODING_AGENT_SYSTEM_PROMPT,
+    coding_agent_dynamic_prompt,
+)
 
 
 def create_coding_agent(
     llm: Any,
     tools: Optional[Sequence[BaseTool | Callable | dict[str, Any]]] = None,
+    middleware: Optional[list] = None,
 ) -> CompiledStateGraph:
     """
     Create a Coding Agent using LangGraph's create_agent.
@@ -37,14 +45,19 @@ def create_coding_agent(
     Args:
         llm: The language model to use (ChatModel instance)
         tools: Optional list of tools (file ops, git, shell, etc.)
+        middleware: Optional list of middleware (defaults to coding_agent_dynamic_prompt)
 
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
+    # Use default dynamic prompt middleware if none provided
+    agent_middleware = middleware if middleware is not None else [coding_agent_dynamic_prompt]
+
     return create_agent(
         model=llm,
         tools=tools or [],
         prompt=CODING_AGENT_SYSTEM_PROMPT,
+        middleware=agent_middleware,
         name="coding_agent",
     )
 
@@ -71,11 +84,7 @@ class CodingAgentState:
 
     def is_session_complete(self) -> bool:
         """Check if the current session is complete."""
-        return (
-            self.tests_passed
-            and self.changes_committed
-            and self.progress_updated
-        )
+        return self.tests_passed and self.changes_committed and self.progress_updated
 
     def reset_for_new_session(self):
         """Reset state for a new session."""

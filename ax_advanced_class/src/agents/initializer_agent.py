@@ -10,6 +10,10 @@ Based on Anthropic's article - The Initializer Agent:
 - Creates claude-progress.txt for logging completed work
 - Creates feature_list.json with 50-200 granular features
 - Makes initial git commit documenting foundational setup
+
+Uses @dynamic_prompt middleware for cache-optimized dynamic prompting:
+- Static system prompt is cached (placed first)
+- Dynamic project context is appended via middleware (placed last)
 """
 
 from typing import Any, Optional, Sequence, Callable
@@ -18,12 +22,16 @@ from langgraph.prebuilt import create_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
-from ax_advanced_class.src.prompts.initializer_prompt import INITIALIZER_SYSTEM_PROMPT
+from ax_advanced_class.src.prompts.initializer_prompt import (
+    INITIALIZER_SYSTEM_PROMPT,
+    initializer_agent_dynamic_prompt,
+)
 
 
 def create_initializer_agent(
     llm: Any,
     tools: Optional[Sequence[BaseTool | Callable | dict[str, Any]]] = None,
+    middleware: Optional[list] = None,
 ) -> CompiledStateGraph:
     """
     Create an Initializer Agent using LangGraph's create_agent.
@@ -39,14 +47,19 @@ def create_initializer_agent(
     Args:
         llm: The language model to use (ChatModel instance)
         tools: Optional list of tools (file operations, git, etc.)
+        middleware: Optional list of middleware (defaults to initializer_agent_dynamic_prompt)
 
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
+    # Use default dynamic prompt middleware if none provided
+    agent_middleware = middleware if middleware is not None else [initializer_agent_dynamic_prompt]
+
     return create_agent(
         model=llm,
         tools=tools or [],
         prompt=INITIALIZER_SYSTEM_PROMPT,
+        middleware=agent_middleware,
         name="initializer_agent",
     )
 
