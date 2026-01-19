@@ -27,6 +27,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 import operator
 
+from ax_advanced_class.src.prompts import (
+    coding_agent_dynamic_prompt,
+    initializer_agent_dynamic_prompt,
+)
+from ax_advanced_class.src.agents import (
+    create_coding_agent,
+    create_initializer_agent,
+)
 
 # =============================================================================
 # State Definitions
@@ -35,6 +43,7 @@ import operator
 
 class FeatureStatus(str, Enum):
     """Status of a feature in the feature list."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -48,6 +57,7 @@ class Feature(TypedDict):
     Based on the article's recommendation for structured JSON tracking
     with 50-200 granular features.
     """
+
     id: str
     category: str  # functional, ui, performance, security
     description: str
@@ -59,6 +69,7 @@ class Feature(TypedDict):
 
 class ProgressEntry(TypedDict):
     """A single entry in the progress log (claude-progress.txt)."""
+
     timestamp: str
     agent: str  # initializer or coding
     action: str
@@ -79,6 +90,7 @@ class OrchestratorState(TypedDict):
     Key insight from article: "Each new session begins with no memory of what came before"
     so we persist state through structured artifacts.
     """
+
     # Conversation messages (accumulates across turns)
     messages: Annotated[list[BaseMessage], operator.add]
 
@@ -114,6 +126,7 @@ class OrchestratorState(TypedDict):
 
 class AgentRoute(str, Enum):
     """Possible routing destinations for the orchestrator."""
+
     INITIALIZER = "initializer"
     CODING = "coding"
     FINISH = "__end__"
@@ -147,7 +160,6 @@ class LongRunningOrchestrator:
     def __init__(
         self,
         llm: Any,
-        tools: Optional[list] = None,
         checkpointer: Optional[Any] = None,
     ):
         """
@@ -159,16 +171,12 @@ class LongRunningOrchestrator:
             checkpointer: Optional LangGraph checkpointer for state persistence
         """
         self.llm = llm
-        self.tools = tools or []
         self.checkpointer = checkpointer or MemorySaver()
 
-        # Create agents as class fields (reused across invocations)
-        # Uses @dynamic_prompt middleware for cache-optimized dynamic prompting
-        from ax_advanced_class.src.agents.initializer_agent import create_initializer_agent
-        from ax_advanced_class.src.agents.coding_agent import create_coding_agent
-
-        self.initializer_agent = create_initializer_agent(self.llm, self.tools)
-        self.coding_agent = create_coding_agent(self.llm, self.tools)
+        self.initializer_agent = create_initializer_agent(
+            self.llm, [initializer_agent_dynamic_prompt]
+        )
+        self.coding_agent = create_coding_agent(self.llm, [coding_agent_dynamic_prompt])
 
         # Build the workflow graph
         self.workflow = self._build_workflow()
@@ -213,7 +221,7 @@ class LongRunningOrchestrator:
                 AgentRoute.INITIALIZER: "initializer",
                 AgentRoute.CODING: "coding",
                 AgentRoute.FINISH: END,
-            }
+            },
         )
 
         # After agents complete, route back to router for next decision
@@ -272,7 +280,9 @@ class LongRunningOrchestrator:
             }
 
         # Use feature list from file if available, otherwise from state
-        feature_list = file_feature_list if file_feature_list else state.get("feature_list", [])
+        feature_list = (
+            file_feature_list if file_feature_list else state.get("feature_list", [])
+        )
 
         # Check if all features are complete
         if feature_list:
@@ -332,12 +342,16 @@ class LongRunningOrchestrator:
             "recursion_limit": 100,
             "context": {
                 "project_name": state.get("project_name", "Unnamed Project"),
-                "project_description": state.get("project_description", "No description provided"),
+                "project_description": state.get(
+                    "project_description", "No description provided"
+                ),
                 "repository_path": state.get("repository_path", "./workspace"),
             },
         }
 
-        result = self.initializer_agent.invoke({"messages": [input_message]}, config=agent_config)
+        result = self.initializer_agent.invoke(
+            {"messages": [input_message]}, config=agent_config
+        )
 
         # Extract output
         output = result.get("output", "Initialization complete.")
@@ -391,11 +405,17 @@ class LongRunningOrchestrator:
             feature_list = state.get("feature_list", [])
             if not feature_list:
                 return {
-                    "messages": [AIMessage(content="No features found. Initialization may have failed or feature_list.json is missing.")],
+                    "messages": [
+                        AIMessage(
+                            content="No features found. Initialization may have failed or feature_list.json is missing."
+                        )
+                    ],
                     "should_continue": False,
                 }
             return {
-                "messages": [AIMessage(content="All features are complete! Project finished.")],
+                "messages": [
+                    AIMessage(content="All features are complete! Project finished.")
+                ],
                 "should_continue": False,
             }
 
@@ -418,7 +438,9 @@ class LongRunningOrchestrator:
             },
         }
 
-        result = self.coding_agent.invoke({"messages": [input_message]}, config=agent_config)
+        result = self.coding_agent.invoke(
+            {"messages": [input_message]}, config=agent_config
+        )
 
         # Extract output
         output = result.get("output", "Session complete.")
@@ -505,7 +527,7 @@ class LongRunningOrchestrator:
 
         return self.workflow.invoke(initial_state, config)
 
-    def stream(
+    async def astream_events(
         self,
         project_name: str,
         project_description: str,
@@ -513,10 +535,12 @@ class LongRunningOrchestrator:
         config: Optional[dict] = None,
     ):
         """
-        Stream the orchestration process for real-time updates.
-
-        Yields events as the workflow progresses through nodes.
+        Async stream events with the custom stream_event_handler.
         """
+        from ax_advanced_class.src.utils.stream_event_handler import (
+            process_stream_event,
+        )
+
         initial_state: OrchestratorState = {
             "messages": [],
             "project_name": project_name,
@@ -534,8 +558,16 @@ class LongRunningOrchestrator:
         }
 
         config = config or {"configurable": {"thread_id": "default"}}
+        chain_stack = []
 
-        for event in self.workflow.stream(initial_state, config):
+        # Use astream_events from the compiled workflow
+        # 'v2' version is standard for LangGraph
+        async for event in self.workflow.astream_events(
+            initial_state, config, version="v2"
+        ):
+            # Process with our custom handler
+            await process_stream_event(event, chain_stack)
+            # Re-yield the original event so downstream consumers still see it
             yield event
 
     def get_state(self, config: dict) -> Optional[OrchestratorState]:
