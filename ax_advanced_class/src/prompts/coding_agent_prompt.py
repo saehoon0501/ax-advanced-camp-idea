@@ -150,6 +150,11 @@ You have access to tools for file operations, git commands, and shell execution.
 # - repository_path: str
 
 
+from ax_advanced_class.src.prompts.validation_rules_prompt import (
+    VALIDATION_RULES_PROMPT,
+)
+
+
 @dynamic_prompt
 def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
     """
@@ -177,7 +182,11 @@ def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
     repository_path = ctx.get("repository_path", "./workspace")
 
     # Format steps as a readable list
-    steps_formatted = "\n".join(f"  - {step}" for step in feature_steps) if feature_steps else "  - No specific steps defined"
+    steps_formatted = (
+        "\n".join(f"  - {step}" for step in feature_steps)
+        if feature_steps
+        else "  - No specific steps defined"
+    )
 
     # Format dependencies
     deps_formatted = ", ".join(feature_dependencies) if feature_dependencies else "None"
@@ -202,8 +211,8 @@ def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
 
 Start your session by following PHASE 1 (Recovery & Orientation) as described above."""
 
-    # Return: static system prompt (cacheable) + dynamic content (at the end)
-    return CODING_AGENT_SYSTEM_PROMPT + dynamic_content
+    # Return: static system prompt (cacheable) + validation rules + dynamic content (at the end)
+    return CODING_AGENT_SYSTEM_PROMPT + VALIDATION_RULES_PROMPT + dynamic_content
 
 
 # Legacy export for backward compatibility

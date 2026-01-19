@@ -126,6 +126,11 @@ You have access to tools for file operations and git commands. Use them to creat
 # - repository_path: str
 
 
+from ax_advanced_class.src.prompts.validation_rules_prompt import (
+    VALIDATION_RULES_PROMPT,
+)
+
+
 @dynamic_prompt
 def initializer_agent_dynamic_prompt(request: ModelRequest) -> str:
     """
@@ -165,8 +170,8 @@ Please perform the following setup tasks:
 
 Remember: Your job is ONLY setup - do not implement features!"""
 
-    # Return: static system prompt (cacheable) + dynamic content (at the end)
-    return INITIALIZER_SYSTEM_PROMPT + dynamic_content
+    # Return: static system prompt (cacheable) + validation rules + dynamic content (at the end)
+    return INITIALIZER_SYSTEM_PROMPT + VALIDATION_RULES_PROMPT + dynamic_content
 
 
 # Legacy export for backward compatibility
