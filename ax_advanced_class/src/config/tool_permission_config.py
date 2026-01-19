@@ -15,14 +15,16 @@ class PermissionLevel(str, Enum):
     """
     Permission levels for tool execution.
 
-    RESTRICTED: Only safe read operations
-    STANDARD: Normal development operations (default)
-    ELEVATED: All operations including destructive ones
+    DENY: Prevent any operation from being executed
+    ALLOW: Allow specific operations to be executed
+    ASK: Ask the user for permission to execute the operation (default)
+
+    Priority: DENY > ALLOW > ASK
     """
 
-    RESTRICTED = "restricted"
-    STANDARD = "standard"
-    ELEVATED = "elevated"
+    DENY = "deny"
+    ALLOW = "allow"
+    ASK = "ask"
 
 
 class PermissionDeniedError(Exception):
@@ -96,9 +98,6 @@ class PermissionConfig:
             r"wget.*\|\s*bash",  # pipe wget to bash
             r"eval\s+\$",  # eval with variable
             r":\(\)\{\s*:\|:&",  # fork bomb
-            r"&&",  # prevent command chaining
-            r";",  # prevent command chaining
-            r"\|",  # prevent command piping
         ]
     )
 
