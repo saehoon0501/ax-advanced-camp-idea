@@ -16,21 +16,18 @@ Uses @dynamic_prompt middleware for cache-optimized dynamic prompting:
 - Dynamic project context is appended via middleware (placed last)
 """
 
-from typing import Any, Optional, Sequence, Callable
+from typing import Any, Optional
 
-from langgraph.prebuilt import create_agent
+from langchain.agents import create_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
-from ax_advanced_class.src.prompts.initializer_prompt import (
-    INITIALIZER_SYSTEM_PROMPT,
-    initializer_agent_dynamic_prompt,
-)
+from ax_advanced_class.src.prompts import initializer_agent_dynamic_prompt
+from ax_advanced_class.src.tools import ShellTool, FileOperationTool
 
 
 def create_initializer_agent(
     llm: Any,
-    tools: Optional[Sequence[BaseTool | Callable | dict[str, Any]]] = None,
     middleware: Optional[list] = None,
 ) -> CompiledStateGraph:
     """
@@ -52,13 +49,16 @@ def create_initializer_agent(
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
+    tools = [ShellTool().get_langchain_tools()]
+    tools.extend(FileOperationTool().get_langchain_tools())
     # Use default dynamic prompt middleware if none provided
-    agent_middleware = middleware if middleware is not None else [initializer_agent_dynamic_prompt]
+    agent_middleware = (
+        middleware if middleware is not None else [initializer_agent_dynamic_prompt]
+    )
 
     return create_agent(
         model=llm,
-        tools=tools or [],
-        prompt=INITIALIZER_SYSTEM_PROMPT,
+        tools=tools,
         middleware=agent_middleware,
         name="initializer_agent",
     )

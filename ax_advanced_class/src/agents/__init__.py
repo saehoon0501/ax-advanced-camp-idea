@@ -13,7 +13,6 @@ from ax_advanced_class.src.agents.initializer_agent import (
 from ax_advanced_class.src.agents.coding_agent import (
     create_coding_agent,
     CodingAgentState,
-    SessionLifecycle,
 )
 
 __all__ = [
@@ -21,5 +20,4 @@ __all__ = [
     "create_coding_agent",
     "InitializerAgentState",
     "CodingAgentState",
-    "SessionLifecycle",
 ]

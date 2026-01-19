@@ -15,21 +15,18 @@ Uses @dynamic_prompt middleware for cache-optimized dynamic prompting:
 - Dynamic feature/session context is appended via middleware (placed last)
 """
 
-from typing import Any, Optional, Sequence, Callable
+from typing import Any, Optional
 
-from langgraph.prebuilt import create_agent
+from langchain.agents import create_agent
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
-from ax_advanced_class.src.prompts.coding_agent_prompt import (
-    CODING_AGENT_SYSTEM_PROMPT,
-    coding_agent_dynamic_prompt,
-)
+from ax_advanced_class.src.prompts import coding_agent_dynamic_prompt
+from ax_advanced_class.src.tools import ShellTool, FileOperationTool
 
 
 def create_coding_agent(
     llm: Any,
-    tools: Optional[Sequence[BaseTool | Callable | dict[str, Any]]] = None,
     middleware: Optional[list] = None,
 ) -> CompiledStateGraph:
     """
@@ -50,13 +47,15 @@ def create_coding_agent(
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
+    tools = [ShellTool().get_langchain_tools()]
+    tools.extend(FileOperationTool().get_langchain_tools())
+
     # Use default dynamic prompt middleware if none provided
     agent_middleware = middleware if middleware is not None else [coding_agent_dynamic_prompt]
 
     return create_agent(
         model=llm,
-        tools=tools or [],
-        prompt=CODING_AGENT_SYSTEM_PROMPT,
+        tools=tools,
         middleware=agent_middleware,
         name="coding_agent",
     )
@@ -106,72 +105,3 @@ class CodingAgentState:
             "progress_updated": self.progress_updated,
             "is_session_complete": self.is_session_complete(),
         }
-
-
-class SessionLifecycle:
-    """
-    Manages the lifecycle of a coding session.
-
-    Based on Anthropic's recommended patterns:
-    1. Start: Read state, run smoke tests
-    2. Work: Implement feature, run tests
-    3. End: Commit, update progress, leave notes
-
-    From the article:
-    "Each session follows:
-    1. Run `pwd` to confirm working directory
-    2. Read progress files and git logs
-    3. Select highest-priority incomplete feature
-    4. Implement incrementally
-    5. Verify end-to-end functionality
-    6. Commit with progress updates"
-    """
-
-    PHASE_START = "start"
-    PHASE_WORK = "work"
-    PHASE_END = "end"
-
-    def __init__(self):
-        self.current_phase = self.PHASE_START
-        self.smoke_test_passed: bool = False
-        self.feature_implemented: bool = False
-        self.e2e_test_passed: bool = False
-
-    def advance_phase(self) -> str:
-        """Advance to the next phase if conditions are met."""
-        if self.current_phase == self.PHASE_START and self.smoke_test_passed:
-            self.current_phase = self.PHASE_WORK
-        elif self.current_phase == self.PHASE_WORK and self.e2e_test_passed:
-            self.current_phase = self.PHASE_END
-        return self.current_phase
-
-    def get_phase_instructions(self) -> str:
-        """Get instructions for the current phase."""
-        instructions = {
-            self.PHASE_START: """
-START PHASE (Recovery & Orientation):
-1. Run `pwd` to see your working directory
-2. Read git logs: `git log --oneline -10`
-3. Read claude-progress.txt to understand what happened
-4. Read feature_list.json to see all features
-5. Run init.sh to start the dev server
-6. Run basic smoke test to verify the app works
-""",
-            self.PHASE_WORK: """
-WORK PHASE (Feature Implementation):
-1. Select ONE feature where passes=false (highest priority)
-2. Work ONLY on that feature
-3. Implement it completely (code + tests + docs)
-4. Test it end-to-end (like a real user would)
-5. Only mark passes=true after E2E test succeeds
-""",
-            self.PHASE_END: """
-END PHASE (Commit & Handoff):
-1. Commit your work with clear message
-2. Update claude-progress.txt with what you did
-3. Ensure the app is in a working state
-4. Leave clear notes for the next agent
-5. Update feature_list.json if feature is complete
-""",
-        }
-        return instructions.get(self.current_phase, "")
