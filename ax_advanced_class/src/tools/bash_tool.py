@@ -108,20 +108,31 @@ class BashTool:
         @tool
         def bash(command: str, timeout: Optional[int] = 120) -> str:
             """
-            Execute a shell command (Bash).
+            Execute a shell command in a persistent bash session.
 
-            Use this tool for:
-            - File system navigation: ls, pwd, mkdir, mv, cp
-            - Git operations: git status, add, commit, push, pull, checkout
-            - Running scripts: ./script.sh, python main.py
-            - Package management: npm, pip, uv
+            USE THIS TOOL FOR:
+            - Git operations: git status, add, commit, push, pull, checkout, diff, log
+            - Package managers: npm, pip, uv
+            - Running scripts/tests: pytest, npm test, python script.py
+            - System commands: ls, pwd, mkdir, mv, cp
 
-            PREFER FILE TOOLS instead of bash for:
-            - Reading files: Use Read (not cat/head/tail)
-            - Searching content: Use Grep (not grep/rg)
-            - Finding files: Use Glob (not find)
-            - Editing files: Use Edit (not sed/awk)
-            - Writing files: Use Write (not echo/cat redirects)
+            DO NOT USE THIS TOOL FOR (use File Tools instead):
+            - Reading files: Use Read tool (not cat/head/tail)
+            - Searching content: Use Grep tool (not grep/rg)
+            - Finding files: Use Glob tool (not find)
+            - Editing files: Use Edit tool (not sed/awk)
+            - Writing files: Use Write tool (not echo/cat redirects)
+
+            Git Safety Rules:
+            - NEVER use: git push --force, git reset --hard, --no-verify
+            - NEVER commit unless user explicitly asks
+            - NEVER use -i flag (interactive commands not supported)
+            - Use HEREDOC for commit messages with special characters
+
+            Command Chaining:
+            - Use && for dependent sequential commands
+            - Use ; for independent sequential commands
+            - DO NOT use newlines to separate commands
 
             Args:
                 command: The bash command to execute

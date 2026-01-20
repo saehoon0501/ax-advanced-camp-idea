@@ -190,7 +190,14 @@ class FileOperationTool:
         @tool
         def read(validated_path: str, encoding: str = "utf-8") -> str:
             """
-            Read files (including text, code, config).
+            Read file contents from the filesystem.
+
+            ALWAYS use this tool instead of cat, head, or tail commands.
+            This tool is optimized for correct permissions and safer file access.
+
+            Supported file types:
+            - Text files, code, config files
+            - Returns content with proper encoding handling
 
             Args:
                 path: Path to the file (relative to workspace)
@@ -204,7 +211,16 @@ class FileOperationTool:
         @tool
         def write(validated_path: str, content: str) -> str:
             """
-            Create/overwrite files.
+            Create new files or overwrite existing files.
+
+            ALWAYS use this tool instead of echo redirects or cat <<EOF.
+            This tool provides proper validation and safer file creation.
+
+            Guidelines:
+            - PREFER Edit tool over Write for modifying existing files
+            - NEVER create documentation files (*.md, README) unless explicitly requested
+            - NEVER create new files unless absolutely necessary
+            - This tool will overwrite existing files without warning
 
             Args:
                 path: Path to the file (relative to workspace)
@@ -218,7 +234,21 @@ class FileOperationTool:
         @tool
         def edit(validated_path: str, old_string: str, new_string: str) -> str:
             """
-            Exact string replacement in files.
+            Perform exact string replacement in files.
+
+            ALWAYS use this tool instead of sed or awk commands.
+            This tool provides safer, validated string replacements.
+
+            Mechanics:
+            - The edit will FAIL if old_string is not unique in the file
+            - Provide more surrounding context to make old_string unique
+            - You must match the EXACT string including whitespace/indentation
+            - Preserve exact indentation (tabs/spaces) when editing
+
+            Best Practices:
+            - Read the file first before editing to understand its content
+            - Include enough context in old_string to ensure uniqueness
+            - If old_string appears multiple times, include more surrounding lines
 
             Args:
                 path: Path to the file
@@ -233,10 +263,22 @@ class FileOperationTool:
         @tool
         def glob(pattern: str = "**/*") -> str:
             """
-            Find files by pattern (e.g., **/*.ts).
+            Find files by glob pattern matching.
+
+            ALWAYS use this tool instead of find or ls commands for file searches.
+            This tool provides fast pattern matching optimized for any codebase size.
+
+            Pattern Examples:
+            - *.py           : Python files in current directory
+            - **/*.py        : Python files recursively
+            - src/**/*.ts    : TypeScript files under src/
+            - test_*.py      : Files starting with test_
+            - *.{js,ts}      : JS and TS files
+
+            Returns matching file paths sorted by modification time.
 
             Args:
-                pattern: Glob pattern to match
+                pattern: Glob pattern to match (e.g., **/*.py, src/**/*.ts)
             """
             result = self.glob_files(pattern)
             if result["success"]:
@@ -246,12 +288,25 @@ class FileOperationTool:
         @tool
         def grep(pattern: str, validated_path: str = ".", recursive: bool = True) -> str:
             """
-            Search file contents with regex.
+            Search file contents using regex patterns.
+
+            ALWAYS use this tool instead of grep or rg bash commands.
+            This tool is optimized for correct permissions and access.
+
+            Features:
+            - Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")
+            - Returns matching lines with file paths and line numbers
+            - Can search single files or directories recursively
+
+            Pattern Syntax Notes:
+            - Uses Python regex (similar to ripgrep)
+            - Literal braces need escaping: interface\\{\\} to find interface{}
+            - Dots are metacharacters: config\\.json for literal dot
 
             Args:
                 pattern: Regex pattern to search for
-                path: File or directory to search in (default: .)
-                recursive: Search recursively (default: True)
+                path: File or directory to search in (default: workspace root)
+                recursive: Search recursively in directories (default: True)
             """
             result = self.grep_files(pattern, validated_path, recursive)
             if result["success"]:
