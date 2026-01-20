@@ -10,6 +10,7 @@ architecture (Initializer + Coding Agent).
 
 import os
 import asyncio
+import uuid
 from typing import Optional
 
 from ax_advanced_class.src.orchestrator import create_orchestrator
@@ -67,13 +68,14 @@ def main():
     project_description = None
     orchestrator = None
     config = {"configurable": {"thread_id": "cli-session"}}
+    interrupt_count = 0
 
     while True:
         try:
-            # Prompt with current workspace indicator
-            workspace_name = os.path.basename(os.path.abspath(workspace))
-            prompt_text = f"[prompt]{workspace_name}[/prompt] > "
+            console.rule(style="dim")
+            prompt_text = "[prompt]>[/prompt] "
             user_input = console.input(prompt_text).strip()
+            interrupt_count = 0
 
             if not user_input:
                 continue
@@ -143,6 +145,11 @@ def main():
                 console.print()
                 console.print(f"[info]Starting session for:[/info] {project_name}")
 
+                # Generate unique thread_id for this session
+                thread_id = f"session_{uuid.uuid4().hex[:8]}"
+                config = {"configurable": {"thread_id": thread_id}}
+                console.print(f"[dim]Thread ID: {thread_id}[/dim]")
+
                 # Run the async streaming session
                 asyncio.run(
                     run_streaming_session(
@@ -150,6 +157,7 @@ def main():
                         project_name=project_name,
                         project_description=project_description,
                         repository_path=workspace,
+                        config=config,
                     )
                 )
                 continue
@@ -159,7 +167,11 @@ def main():
 
         except KeyboardInterrupt:
             console.print()
-            console.print("[warning]Interrupted. Type 'exit' to quit.[/warning]")
+            interrupt_count += 1
+            if interrupt_count >= 2:
+                console.print("[dim]Goodbye![/dim]")
+                break
+            console.print("[warning]Press Ctrl+C again to exit.[/warning]")
             continue
 
         except Exception as e:

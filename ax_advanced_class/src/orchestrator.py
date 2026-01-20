@@ -24,6 +24,7 @@ import os
 from langgraph.graph import END, StateGraph, START
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 import operator
 
@@ -533,37 +534,52 @@ class LongRunningOrchestrator:
         project_description: str,
         repository_path: str = "./workspace",
         config: Optional[dict] = None,
+        resume_value: Optional[Any] = None,
     ):
         """
         Async stream events with the custom stream_event_handler.
+
+        Args:
+            project_name: Name of the project
+            project_description: Description of the project
+            repository_path: Path to the repository
+            config: LangGraph config with thread_id for checkpointing
+            resume_value: If provided, resume from interrupt with this value
+                         (typically True/False for permission approval)
         """
         from ax_advanced_class.src.utils.stream_event_handler import (
             process_stream_event,
         )
 
-        initial_state: OrchestratorState = {
-            "messages": [],
-            "project_name": project_name,
-            "project_description": project_description,
-            "repository_path": repository_path,
-            "feature_list": [],
-            "current_feature_id": None,
-            "progress_log": [],
-            "is_initialized": False,
-            "session_count": 0,
-            "last_commit_hash": None,
-            "next_agent": None,
-            "should_continue": True,
-            "last_error": None,
-        }
-
         config = config or {"configurable": {"thread_id": "default"}}
         chain_stack = []
+
+        # Determine input: either initial state or resume command
+        if resume_value is not None:
+            # Resume from interrupt with the provided value
+            stream_input = Command(resume=resume_value)
+        else:
+            # Initial run with full state
+            stream_input: OrchestratorState = {
+                "messages": [],
+                "project_name": project_name,
+                "project_description": project_description,
+                "repository_path": repository_path,
+                "feature_list": [],
+                "current_feature_id": None,
+                "progress_log": [],
+                "is_initialized": False,
+                "session_count": 0,
+                "last_commit_hash": None,
+                "next_agent": None,
+                "should_continue": True,
+                "last_error": None,
+            }
 
         # Use astream_events from the compiled workflow
         # 'v2' version is standard for LangGraph
         async for event in self.workflow.astream_events(
-            initial_state, config, version="v2"
+            stream_input, config, version="v2"
         ):
             # Process with our custom handler
             await process_stream_event(event, chain_stack)
@@ -579,13 +595,21 @@ class LongRunningOrchestrator:
         state = self.workflow.get_state(config)
         return state.values if state else None
 
-    def update_state(self, config: dict, updates: dict) -> None:
+    def update_state(
+        self, config: dict, updates: Optional[dict] = None, as_node: Optional[str] = None
+    ) -> None:
         """
         Update the state for a given thread.
 
-        Useful for manual interventions or state corrections.
+        Useful for manual interventions, state corrections, or resuming from interrupts.
+
+        Args:
+            config: LangGraph config with thread_id
+            updates: State updates to apply (can be None for resume operations)
+            as_node: Optional node name to resume from (used for interrupt handling)
         """
-        self.workflow.update_state(config, updates)
+        if updates is not None:
+            self.workflow.update_state(config, updates, as_node=as_node)
 
 
 # =============================================================================
