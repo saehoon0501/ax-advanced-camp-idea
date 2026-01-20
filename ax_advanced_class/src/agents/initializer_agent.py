@@ -16,14 +16,33 @@ Uses @dynamic_prompt middleware for cache-optimized dynamic prompting:
 - Dynamic project context is appended via middleware (placed last)
 """
 
-from typing import Any, Optional
+from typing import Annotated, Any, Optional, TypedDict
+import operator
 
 from langchain.agents import create_agent
 from langchain_core.tools import BaseTool
+from langchain_core.messages import BaseMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from ax_advanced_class.src.prompts import initializer_agent_dynamic_prompt
-from ax_advanced_class.src.tools import BashTool, FileOperationTool
+from ax_advanced_class.src.tools import BashTool, FileOperationTool, TodoWriteTool
+
+
+# =============================================================================
+# Agent State Definition
+# =============================================================================
+
+
+class InitializerAgentState(TypedDict):
+    """
+    State for the Initializer Agent.
+
+    This TypedDict defines the agent's internal state, separate from OrchestratorState.
+    The todo_list is managed by the agent via TodoWriteTool.
+    """
+
+    messages: Annotated[list[BaseMessage], operator.add]
+    todo_list: list[dict]  # Agent's task tracking list
 
 
 def create_initializer_agent(
@@ -43,14 +62,17 @@ def create_initializer_agent(
 
     Args:
         llm: The language model to use (ChatModel instance)
-        tools: Optional list of tools (file operations, git, etc.)
         middleware: Optional list of middleware (defaults to initializer_agent_dynamic_prompt)
 
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
-    tools = [BashTool().get_langchain_tools()]
+    # Collect all tools
+    tools = []
+    tools.extend(BashTool().get_langchain_tools())
     tools.extend(FileOperationTool().get_langchain_tools())
+    tools.extend(TodoWriteTool().get_langchain_tools())
+
     # Use default dynamic prompt middleware if none provided
     agent_middleware = (
         middleware if middleware is not None else [initializer_agent_dynamic_prompt]
@@ -61,43 +83,7 @@ def create_initializer_agent(
         tools=tools,
         middleware=agent_middleware,
         name="initializer_agent",
+        state_schema=InitializerAgentState,
     )
 
 
-class InitializerAgentState:
-    """
-    State management for the Initializer Agent.
-
-    Tracks:
-    - Project metadata (name, description)
-    - Generated feature list
-    - Initialization progress
-    """
-
-    def __init__(self):
-        self.project_name: Optional[str] = None
-        self.project_description: Optional[str] = None
-        self.feature_list: list = []
-        self.is_git_initialized: bool = False
-        self.is_progress_file_created: bool = False
-        self.is_init_script_created: bool = False
-
-    def is_complete(self) -> bool:
-        """Check if initialization is complete."""
-        return (
-            self.feature_list
-            and self.is_git_initialized
-            and self.is_progress_file_created
-        )
-
-    def to_dict(self) -> dict:
-        """Convert state to dictionary for serialization."""
-        return {
-            "project_name": self.project_name,
-            "project_description": self.project_description,
-            "feature_count": len(self.feature_list),
-            "is_git_initialized": self.is_git_initialized,
-            "is_progress_file_created": self.is_progress_file_created,
-            "is_init_script_created": self.is_init_script_created,
-            "is_complete": self.is_complete(),
-        }

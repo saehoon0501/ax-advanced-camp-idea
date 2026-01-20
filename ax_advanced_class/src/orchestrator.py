@@ -42,6 +42,26 @@ from ax_advanced_class.src.agents import (
 # =============================================================================
 
 
+class TodoStatus(str, Enum):
+    """Status of a todo item for task tracking."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
+class TodoItem(TypedDict):
+    """
+    A single todo item for task tracking.
+
+    Based on Claude Code's TodoWrite tool schema.
+    """
+
+    content: str  # Imperative form: "Create feature_list.json"
+    activeForm: str  # Present continuous: "Creating feature_list.json"
+    status: TodoStatus  # TodoStatus enum value
+
+
 class FeatureStatus(str, Enum):
     """Status of a feature in the feature list."""
 
@@ -118,6 +138,10 @@ class OrchestratorState(TypedDict):
 
     # Error handling
     last_error: Optional[str]
+
+    # Orchestrator-level todos (high-level workflow goals)
+    # Example: ["Initialize project", "Implement all features", "Final verification"]
+    orchestrator_todos: list[TodoItem]
 
 
 # =============================================================================
@@ -522,6 +546,7 @@ class LongRunningOrchestrator:
             "next_agent": None,
             "should_continue": True,
             "last_error": None,
+            "orchestrator_todos": [],
         }
 
         config = config or {"configurable": {"thread_id": "default"}}
@@ -574,6 +599,7 @@ class LongRunningOrchestrator:
                 "next_agent": None,
                 "should_continue": True,
                 "last_error": None,
+                "orchestrator_todos": [],
             }
 
         # Use astream_events from the compiled workflow

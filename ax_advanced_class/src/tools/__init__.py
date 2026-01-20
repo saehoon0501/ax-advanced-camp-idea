@@ -4,6 +4,7 @@ Tools Module
 Contains permission-controlled tools for the long-running agent:
 - BashTool: Shell commands (git, scripts, package managers)
 - FileOperationTool: File read/write/edit/glob/grep
+- TodoWriteTool: Task tracking for agents
 
 TOOL SELECTION GUIDE:
 For file operations, ALWAYS prefer FileOperationTool over bash commands:
@@ -18,6 +19,7 @@ All tools are built on a middleware-based permission system.
 
 from ax_advanced_class.src.tools.bash_tool import BashTool
 from ax_advanced_class.src.tools.file_tool import FileOperationTool
+from ax_advanced_class.src.tools.todo_tool import TodoWriteTool
 from ax_advanced_class.src.config.tool_permission_config import (
     PermissionConfig,
     PermissionLevel,
@@ -27,6 +29,7 @@ __all__ = [
     # Tools
     "BashTool",
     "FileOperationTool",
+    "TodoWriteTool",
     # Config
     "PermissionConfig",
     "PermissionLevel",
