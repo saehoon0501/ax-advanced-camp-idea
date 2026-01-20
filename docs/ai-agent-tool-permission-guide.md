@@ -16,6 +16,7 @@ A factual guide documenting how Claude Code's tool and permission system works.
 8. [Other Behaviors](#8-other-behaviors)
 9. [Claude Code Implementation Research](#9-claude-code-implementation-research)
 10. [Behavioral Contract](#10-behavioral-contract)
+11. [File Operation Tools - Deep Dive](#11-file-operation-tools---deep-dive)
 
 ---
 
@@ -265,41 +266,55 @@ This is a **soft rule** - I choose to follow it, but nothing forces me.
 
 ## 4. Command Rules
 
-### My Actual Approach: Blocklist, NOT Whitelist
+### My Actual Approach: Default is ASK
 
-I do **NOT** use "block everything except whitelist". I use the opposite:
+The permission system uses a three-tier approach:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              MY ACTUAL APPROACH: ALLOW BY DEFAULT            │
+│              MY ACTUAL APPROACH: DEFAULT IS ASK              │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  1. Check if command is in BLOCKED list → Block             │
-│  2. Check if command needs APPROVAL → Trigger UI            │
-│  3. Otherwise → ALLOW                                        │
+│  1. Check if command matches DENY rule → BLOCK              │
+│  2. Check if command matches ALLOW rule → ALLOW             │
+│  3. Otherwise → ASK (trigger user approval UI)              │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 
-Pseudocode of my behavior:
+Pseudocode of permission check:
 
 def can_execute(command):
-    if command in HARD_BLOCKED:
+    if matches_any(command, DENY_RULES):
         return "BLOCKED"
 
-    if command in REQUIRES_APPROVAL:
-        return "REQUIRES_APPROVAL"
+    if matches_any(command, ALLOW_RULES):
+        return "ALLOWED"
 
-    return "ALLOWED"  # Default: allow
+    return "ASK"  # Default: ask user for approval
 ```
 
-This means:
-- I can run `uv sync` even though it's not explicitly whitelisted
-- I can run `python script.py` even though it's not explicitly whitelisted
-- I can run any command that's not blocked or requiring approval
+**Priority:** DENY > ALLOW > ASK
 
-**Why not whitelist?**
+**Why some commands run without approval:**
 
-A whitelist would be too restrictive for a coding assistant. There are thousands of possible useful commands (different package managers, build tools, languages, etc.). Maintaining a whitelist would be impractical.
+Commands like `uv sync` or `python script.py` run without triggering approval because:
+- They match implicit ALLOW rules for common safe operations
+- OR the user has pre-configured allow rules in settings
+- NOT because "everything is allowed by default"
+
+**User-configurable rules:**
+
+Users can configure allow/deny rules in settings:
+```json
+{
+  "permissions": {
+    "allow": ["Bash(npm run:*)", "Bash(git status)"],
+    "deny": ["Bash(rm -rf:*)"]
+  }
+}
+```
+
+Without user configuration, many operations will trigger the approval UI.
 
 ### Git Operations (Soft Rules in Prompt)
 
@@ -962,6 +977,444 @@ If something is unused, delete it completely."
 
 These are applied from my training knowledge, not enforced by prompt.
 
+---
+
+## 11. File Operation Tools - Deep Dive
+
+Comprehensive documentation of Read, Edit, Write, Glob, and Grep tools.
+
+**Source Legend:**
+| Label | Meaning |
+|-------|---------|
+| **Confirmed** | Explicitly stated in my system prompt or tool definition |
+| **Inferred** | Reasonable assumption based on typical tool/OS behavior, NOT verified |
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   FILE OPERATION TOOLS                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Read   ──→  Read file contents                             │
+│              (images, PDFs, notebooks supported)            │
+│                                                              │
+│  Edit   ──→  Find-and-replace in files                      │
+│              (requires Read first)                          │
+│                                                              │
+│  Write  ──→  Create or overwrite files                      │
+│              (requires Read first if file exists)           │
+│                                                              │
+│  Glob   ──→  Find files by pattern                          │
+│              (e.g., **/*.py)                                │
+│                                                              │
+│  Grep   ──→  Search file contents                           │
+│              (regex, powered by ripgrep)                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Read Tool
+
+**Purpose:** Read file contents from the filesystem.
+
+**Excerpt from my prompt:**
+```
+"Reads a file from the local filesystem. You can access any file
+directly by using this tool. Assume this tool is able to read all
+files on the machine.
+
+Usage:
+- The file_path parameter must be an absolute path, not a relative path
+- By default, it reads up to 2000 lines starting from the beginning
+- You can optionally specify a line offset and limit (for long files)
+- Any lines longer than 2000 characters will be truncated
+- Results are returned using cat -n format, with line numbers starting at 1"
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | Yes | Absolute path to the file |
+| `offset` | number | No | Line number to start reading from |
+| `limit` | number | No | Number of lines to read (default: 2000) |
+
+**Supported File Types:**
+
+| Type | Behavior |
+|------|----------|
+| Text files | Returns content with line numbers |
+| Images (PNG, JPG, etc.) | Presented visually (multimodal) |
+| PDFs | Processed page by page, text + visual |
+| Jupyter notebooks (.ipynb) | Returns all cells with outputs |
+| Directories | FAILS - use `ls` via Bash instead |
+
+**Output Format:**
+```
+     1→first line of file
+     2→second line of file
+     3→third line of file
+```
+
+**Hard Rules:**
+- Path MUST be absolute
+- Max 2000 lines by default
+- Lines truncated at 2000 characters
+- Cannot read directories
+
+**Edge Cases:**
+
+| Scenario | Behavior | Source |
+|----------|----------|--------|
+| File doesn't exist | Returns error message (not exception) | Confirmed |
+| Empty file | Returns system reminder warning about empty contents | Confirmed |
+| File is a directory | Fails - use `ls` via Bash instead | Confirmed |
+| Binary file (non-text) | May return garbled content or error | Inferred |
+| Symbolic link | Follows link, reads target file | Inferred |
+| Very large file (>2000 lines) | Returns first 2000 lines, use `offset`/`limit` for rest | Confirmed |
+| File with no read permission | Returns permission denied error | Inferred |
+| Path is relative | Fails validation (must be absolute) | Confirmed |
+| File being written by another process | May get partial/inconsistent content | Inferred |
+
+### Edit Tool
+
+**Purpose:** Perform exact string replacements in files.
+
+**Excerpt from my prompt:**
+```
+"Performs exact string replacements in files.
+
+Usage:
+- You must use your Read tool at least once in the conversation before
+  editing. This tool will error if you attempt an edit without reading.
+- The edit will FAIL if old_string is not unique in the file. Either
+  provide a larger string with more surrounding context to make it unique
+  or use replace_all to change every instance.
+- Use replace_all for replacing and renaming strings across the file."
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | Yes | Absolute path to the file |
+| `old_string` | string | Yes | Text to find and replace |
+| `new_string` | string | Yes | Text to replace with |
+| `replace_all` | boolean | No | Replace all occurrences (default: false) |
+
+**Validation Rules (Hard Enforced):**
+
+```
+GIVEN Edit(file_path, old_string, new_string, replace_all)
+WHEN executing
+THEN:
+
+1. IF file was NOT Read in this conversation
+   → FAIL with error "must read file first"
+
+2. IF old_string NOT found in file
+   → FAIL with error "string not found"
+
+3. IF old_string appears multiple times AND replace_all=false
+   → FAIL with error "string not unique, use replace_all or add context"
+
+4. IF old_string == new_string
+   → FAIL with error "old and new strings are identical"
+
+5. IF file was modified since last Read
+   → FAIL with error "file has been modified"
+
+6. ELSE
+   → Replace old_string with new_string
+```
+
+**Edge Case: File Modified Since Last Read (Stale Read Detection)**
+
+The Edit tool tracks whether the file has changed since I last read it. This prevents race conditions and accidental overwrites.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    STALE READ DETECTION                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. I call Read("/path/file.py")                            │
+│     → System records file content hash/timestamp            │
+│                                                              │
+│  2. User or another process modifies file.py                │
+│     (External editor, git pull, another tool, etc.)         │
+│                                                              │
+│  3. I call Edit("/path/file.py", old, new)                  │
+│     → System compares current file to recorded state        │
+│     → Mismatch detected → FAIL                              │
+│                                                              │
+│  4. I must Read the file again to get fresh state           │
+│     → Then Edit will succeed                                │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**What counts as "modified":** *(Inferred - exact mechanism unknown)*
+- File content changed by external editor
+- File changed by `git checkout`, `git pull`, etc.
+- File changed by another tool call in the same conversation
+- File deleted and recreated
+- File permissions changed (may not trigger, depends on implementation)
+
+**Why this matters:** *(Confirmed rationale)*
+- Prevents overwriting changes made by user while I was working
+- Prevents merge conflicts from concurrent edits
+- Ensures my `old_string` match is against the actual current content
+
+**Note:** The existence of stale read detection is confirmed (the tool fails if file changed). The exact implementation mechanism (hash vs timestamp) is inferred.
+
+**Whitespace Handling:**
+```
+"When editing text from Read tool output, ensure you preserve the exact
+indentation (tabs/spaces) as it appears AFTER the line number prefix.
+The line number prefix format is: spaces + line number + tab. Everything
+after that tab is the actual file content to match."
+```
+
+**Example:**
+```python
+# Read returns:
+#      1→def hello():
+#      2→    print("world")
+
+# To change "world" to "universe":
+Edit(
+    file_path="/path/to/file.py",
+    old_string='    print("world")',      # Include exact indentation
+    new_string='    print("universe")'
+)
+```
+
+### Write Tool
+
+**Purpose:** Create new files or overwrite existing files.
+
+**Excerpt from my prompt:**
+```
+"Writes a file to the local filesystem.
+
+Usage:
+- This tool will overwrite the existing file if there is one
+- If this is an existing file, you MUST use the Read tool first to read
+  the file's contents. This tool will fail if you did not read first.
+- ALWAYS prefer editing existing files. NEVER write new files unless
+  explicitly required.
+- NEVER proactively create documentation files (*.md) or README files."
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file_path` | string | Yes | Absolute path to the file |
+| `content` | string | Yes | Content to write |
+
+**Validation Rules (Hard Enforced):**
+
+```
+GIVEN Write(file_path, content)
+WHEN executing
+THEN:
+
+1. IF file EXISTS and was NOT Read in this conversation
+   → FAIL with error "must read existing file first"
+
+2. IF file does NOT exist
+   → Create file with content (no Read required)
+
+3. IF path is outside workspace
+   → ASK for user approval
+
+4. ELSE
+   → Write content to file (overwrites if exists)
+```
+
+**Soft Rules (Prompt-Based):**
+- Prefer Edit over Write for existing files
+- Don't create documentation files unless asked
+- Don't create new files unless necessary
+
+**Edge Cases:**
+
+| Scenario | Behavior | Source |
+|----------|----------|--------|
+| File exists but not read first | FAIL - must read existing file first | Confirmed |
+| File doesn't exist | Creates new file (no read required) | Confirmed |
+| Parent directory doesn't exist | FAIL - directory must exist | Inferred |
+| Path is relative | FAIL - must be absolute | Confirmed |
+| Path outside workspace | Triggers user approval UI | Confirmed |
+| File modified since last read | FAIL - stale read detection (same as Edit) | Confirmed |
+| No write permission on directory | Returns permission denied error | Inferred |
+| Disk full | Returns error from OS | Inferred |
+| File is a directory | FAIL - cannot overwrite directory | Inferred |
+| Writing empty content | Allowed - creates/overwrites with empty file | Inferred |
+
+**Note on Stale Read Detection:**
+
+Write tool also checks if an existing file was modified since you last read it:
+
+```
+1. Read("config.json") → records state
+2. User modifies config.json externally
+3. Write("config.json", new_content) → FAIL (file changed)
+4. Read("config.json") → refresh state
+5. Write("config.json", new_content) → SUCCESS
+```
+
+This applies to Write because it overwrites the entire file - if the file changed, you might be losing changes you didn't see.
+
+### Glob Tool
+
+**Purpose:** Find files by pattern matching.
+
+**Excerpt from my prompt:**
+```
+"Fast file pattern matching tool that works with any codebase size.
+Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\".
+Returns matching file paths sorted by modification time.
+Use this tool when you need to find files by name patterns."
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pattern` | string | Yes | Glob pattern (e.g., `**/*.py`) |
+| `path` | string | No | Directory to search in (default: cwd) |
+
+**Pattern Examples:**
+
+| Pattern | Matches |
+|---------|---------|
+| `*.py` | Python files in current directory |
+| `**/*.py` | Python files recursively |
+| `src/**/*.ts` | TypeScript files under src/ |
+| `test_*.py` | Files starting with test_ |
+| `*.{js,ts}` | JS and TS files |
+
+**Edge Cases:**
+
+| Scenario | Behavior | Source |
+|----------|----------|--------|
+| No files match | Returns empty list | Inferred |
+| Invalid pattern syntax | May error or return unexpected results | Inferred |
+| Path doesn't exist | Returns empty list or error | Inferred |
+| Path is a file (not directory) | May error or return just that file if matches | Inferred |
+| Pattern matches thousands of files | Returns all (may be slow, consider more specific pattern) | Inferred |
+| Hidden files (dotfiles) | Matched by patterns like `.*` or `**/.env` | Inferred |
+| Symbolic links | Typically followed | Inferred |
+| Permission denied on subdirectory | Skips that directory, continues with others | Inferred |
+
+### Grep Tool
+
+**Purpose:** Search file contents using regex.
+
+**Excerpt from my prompt:**
+```
+"A powerful search tool built on ripgrep.
+
+Usage:
+- ALWAYS use Grep for search tasks. NEVER invoke grep or rg as a Bash
+  command. The Grep tool has been optimized for correct permissions.
+- Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")
+- Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping"
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pattern` | string | Yes | Regex pattern to search |
+| `path` | string | No | Directory to search (default: cwd) |
+| `glob` | string | No | Filter files (e.g., `*.py`) |
+| `output_mode` | string | No | `files_with_matches`, `content`, or `count` |
+| `multiline` | boolean | No | Enable multiline matching |
+| `-A`, `-B`, `-C` | number | No | Context lines after/before/around match |
+| `-i` | boolean | No | Case insensitive |
+| `-n` | boolean | No | Show line numbers |
+
+**Output Modes:**
+
+| Mode | Returns |
+|------|---------|
+| `files_with_matches` (default) | List of file paths |
+| `content` | Matching lines with context |
+| `count` | Number of matches per file |
+
+**Edge Cases:**
+
+| Scenario | Behavior | Source |
+|----------|----------|--------|
+| No matches found | Returns empty result | Inferred |
+| Invalid regex pattern | Returns error (ripgrep syntax error) | Inferred |
+| Binary files in search path | Skipped by default (ripgrep behavior) | Inferred |
+| Very large files | Searches normally, but output may be truncated | Confirmed (truncation) |
+| Pattern matches thousands of lines | Returns all, subject to output truncation | Confirmed (truncation) |
+| Path doesn't exist | Returns error | Inferred |
+| Multiline pattern without `multiline: true` | Won't match across lines | Confirmed |
+| Special regex chars not escaped | Treated as regex metacharacters | Confirmed |
+| Searching in single file vs directory | Both work - path can be file or directory | Inferred |
+| Permission denied on some files | Skips those files, continues with others | Inferred |
+| Empty pattern | May error or match everything | Inferred |
+
+**Regex Gotchas:**
+
+```
+# Literal braces need escaping (ripgrep, not grep)
+interface{}  → pattern: "interface\\{\\}"
+
+# Dots are metacharacters
+config.json  → pattern: "config\\.json" (or just "config.json" often works)
+
+# Multiline requires flag
+"function\n  body"  → multiline: true required
+```
+
+### File Tools - Behavioral Contract
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                FILE OPERATION GUARANTEES                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. All paths MUST be absolute                              │
+│                                                              │
+│  2. Edit MUST fail if file not read first                   │
+│                                                              │
+│  3. Write MUST fail if existing file not read first         │
+│                                                              │
+│  4. Write outside workspace MUST trigger approval           │
+│                                                              │
+│  5. Read can access any file (approval for some paths)      │
+│                                                              │
+│  6. Edit with non-unique string MUST fail                   │
+│                                                              │
+│  7. Glob/Grep work in any directory                         │
+│                                                              │
+│  8. Edit MUST fail if file modified since last Read         │
+│                                                              │
+│  9. Write MUST fail if existing file modified since Read    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### File Tools vs Bash - When to Use
+
+| Task | Use | NOT |
+|------|-----|-----|
+| Read file | `Read` | `cat`, `head`, `tail` |
+| Edit file | `Edit` | `sed`, `awk` |
+| Create file | `Write` | `echo >`, `cat <<EOF` |
+| Find files | `Glob` | `find`, `ls` |
+| Search content | `Grep` | `grep`, `rg` |
+| List directory | `Bash(ls)` | - |
+| Check file exists | `Bash(test -f)` | - |
+
 ### Excerpt: Malware Analysis Policy
 
 ```
@@ -1416,7 +1869,8 @@ THEN the following MUST be true:
 │ 5. User denial MUST prevent execution                       │
 │ 6. File paths MUST be absolute for Read/Edit/Write          │
 │ 7. Edit MUST fail if file was not read first                │
-│ 8. Interactive commands MUST fail (no TTY)                  │
+│ 8. Edit/Write MUST fail if file modified since last read    │
+│ 9. Interactive commands MUST fail (no TTY)                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1496,10 +1950,25 @@ WHEN executing
 THEN:
 
 1. IF file was not Read in this conversation → FAIL
-2. IF old_string not found in file → FAIL
-3. IF old_string appears multiple times AND replace_all=false → FAIL
-4. IF old_string == new_string → FAIL
-5. ELSE → Replace old_string with new_string
+2. IF file was modified since last Read → FAIL (stale read)
+3. IF old_string not found in file → FAIL
+4. IF old_string appears multiple times AND replace_all=false → FAIL
+5. IF old_string == new_string → FAIL
+6. ELSE → Replace old_string with new_string
+```
+
+### Write Tool Contract
+
+```
+GIVEN Write(file_path, content)
+WHEN executing
+THEN:
+
+1. IF file EXISTS AND was not Read in this conversation → FAIL
+2. IF file EXISTS AND was modified since last Read → FAIL (stale read)
+3. IF file does NOT exist → Create new file with content
+4. IF path is outside workspace → ASK user for approval
+5. ELSE → Write content (overwrites existing)
 ```
 
 ### Parallel Execution Contract
