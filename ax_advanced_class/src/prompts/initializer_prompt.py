@@ -126,8 +126,8 @@ You have access to tools for file operations and git commands. Use them to creat
 # - repository_path: str
 
 
-from ax_advanced_class.src.prompts.validation_rules_prompt import (
-    VALIDATION_RULES_PROMPT,
+from ax_advanced_class.src.prompts.soft_rules_prompt import (
+    SOFT_RULES_PROMPT,
 )
 
 
@@ -170,14 +170,6 @@ Please perform the following setup tasks:
 
 Remember: Your job is ONLY setup - do not implement features!"""
 
-    # Return: static system prompt (cacheable) + validation rules + dynamic content (at the end)
-    return INITIALIZER_SYSTEM_PROMPT + VALIDATION_RULES_PROMPT + dynamic_content
+    # Return: static system prompt (cacheable) + soft rules + dynamic content (at the end)
+    return INITIALIZER_SYSTEM_PROMPT + SOFT_RULES_PROMPT + dynamic_content
 
-
-# Legacy export for backward compatibility
-from ax_advanced_class.src.prompts.base_prompt import BasePrompt
-
-initializer_prompt = BasePrompt(
-    author="Initializer Agent",
-    prompt=INITIALIZER_SYSTEM_PROMPT,
-)

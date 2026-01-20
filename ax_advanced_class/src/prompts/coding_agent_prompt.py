@@ -150,8 +150,8 @@ You have access to tools for file operations, git commands, and shell execution.
 # - repository_path: str
 
 
-from ax_advanced_class.src.prompts.validation_rules_prompt import (
-    VALIDATION_RULES_PROMPT,
+from ax_advanced_class.src.prompts.soft_rules_prompt import (
+    SOFT_RULES_PROMPT,
 )
 
 
@@ -211,14 +211,6 @@ def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
 
 Start your session by following PHASE 1 (Recovery & Orientation) as described above."""
 
-    # Return: static system prompt (cacheable) + validation rules + dynamic content (at the end)
-    return CODING_AGENT_SYSTEM_PROMPT + VALIDATION_RULES_PROMPT + dynamic_content
+    # Return: static system prompt (cacheable) + soft rules + dynamic content (at the end)
+    return CODING_AGENT_SYSTEM_PROMPT + SOFT_RULES_PROMPT + dynamic_content
 
-
-# Legacy export for backward compatibility
-from ax_advanced_class.src.prompts.base_prompt import BasePrompt
-
-coding_agent_prompt = BasePrompt(
-    author="Coding Agent",
-    prompt=CODING_AGENT_SYSTEM_PROMPT,
-)
