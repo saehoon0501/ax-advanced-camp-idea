@@ -2,13 +2,21 @@
 Tools Module
 
 Contains permission-controlled tools for the long-running agent:
-- ShellTool: Unified shell execution tool (handles bash, git, etc.)
-- FileOperationTool: File read/write/delete with path restrictions
+- BashTool: Shell commands (git, scripts, package managers)
+- FileOperationTool: File read/write/edit/glob/grep
+
+TOOL SELECTION GUIDE:
+For file operations, ALWAYS prefer FileOperationTool over bash commands:
+- Reading files: Use Read (not cat/head/tail)
+- Writing files: Use Write (not echo/cat redirects)
+- Editing files: Use Edit (not sed/awk)
+- Finding files: Use Glob (not find)
+- Searching content: Use Grep (not grep/rg)
 
 All tools are built on a middleware-based permission system.
 """
 
-from ax_advanced_class.src.tools.shell_tool import ShellTool
+from ax_advanced_class.src.tools.bash_tool import BashTool
 from ax_advanced_class.src.tools.file_tool import FileOperationTool
 from ax_advanced_class.src.config.tool_permission_config import (
     PermissionConfig,
@@ -17,7 +25,7 @@ from ax_advanced_class.src.config.tool_permission_config import (
 
 __all__ = [
     # Tools
-    "ShellTool",
+    "BashTool",
     "FileOperationTool",
     # Config
     "PermissionConfig",
@@ -27,14 +35,12 @@ __all__ = [
 
 def create_default_tools(
     workspace_path: str = "./workspace",
-    permission_level: PermissionLevel = PermissionLevel.STANDARD,
 ) -> list:
     """
     Create a default set of LangChain tools for the agents.
 
     Args:
         workspace_path: The root workspace path for file operations
-        permission_level: The permission level for tool execution
 
     Returns:
         List of LangChain tools (callable tools)
@@ -43,16 +49,15 @@ def create_default_tools(
 
     config = PermissionConfig(
         workspace_root=os.path.abspath(workspace_path),
-        permission_level=permission_level,
     )
 
     # Create tool instances
     file_tool = FileOperationTool(config=config)
-    shell_tool = ShellTool(config=config)
+    bash_tool = BashTool(config=config)
 
     # Return the actual LangChain tools (decorated functions)
     tools = []
     tools.extend(file_tool.get_langchain_tools())
-    tools.extend(shell_tool.get_langchain_tools())
+    tools.extend(bash_tool.get_langchain_tools())
 
     return tools

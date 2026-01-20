@@ -1,12 +1,22 @@
 """
-Shell Execution Tool
+Bash Execution Tool
 
 Provides unified access to system shell commands.
+
 This tool covers:
-- System Navigation (ls, cd, pwd)
-- Git Operations (git status, add, commit, push, etc.)
+- System Navigation (ls, pwd, mkdir, mv, cp)
+- Git Operations (git status, add, commit, push, pull, checkout)
 - Script Execution (bash scripts, python scripts)
 - Package Management (pip, npm, uv)
+
+IMPORTANT - Prefer File Tools for these operations:
+- Reading files: Use Read tool instead of cat/head/tail
+- Searching content: Use Grep tool instead of grep/rg
+- Finding files: Use Glob tool instead of find
+- Editing files: Use Edit tool instead of sed/awk
+- Writing files: Use Write tool instead of echo/cat redirects
+
+File tools are purpose-built, safer, and provide better validation.
 """
 
 import os
@@ -16,34 +26,41 @@ from typing import Optional
 from langchain_core.tools import tool
 
 from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
-from ax_advanced_class.src.middleware.tool_validation_middleware import (
-    ToolValidationMiddleware,
-)
 
 
-class ShellTool:
+class BashTool:
     """
-    Unified shell execution tool.
+    Unified bash execution tool.
 
     Serves as the primary interface for all command-line operations.
     Security and validation are handled by ToolValidationMiddleware.
     """
 
+    # Tool names exposed by this class
+    _TOOL_NAMES = ("bash",)
+
     def __init__(self, config: Optional[PermissionConfig] = None):
         self.config = config or PermissionConfig()
-        # Create middleware instance to be used by agents
-        self.validation_middleware = ToolValidationMiddleware(self.config)
+
+    @staticmethod
+    def get_tool_names() -> tuple[str, ...]:
+        """
+        Return names of all LangChain tools provided by this class.
+
+        This is a static method to allow ToolValidationMiddleware to
+        check tool names without instantiating the tool.
+        """
+        return BashTool._TOOL_NAMES
 
     def run(
         self,
         command: str,
-        cwd: Optional[str] = None,
-        timeout: int = 60,
+        timeout: Optional[int] = 120,
     ) -> dict:
         """
         Execute a shell command.
         """
-        work_dir = cwd if cwd else self.config.workspace_root
+        work_dir = self.config.workspace_root
 
         # Ensure workspace exists
         if not os.path.exists(work_dir):
@@ -53,7 +70,6 @@ class ShellTool:
                 pass
 
         try:
-            # shell=True allows complex commands, pipes (if permitted), and shell expansion
             result = subprocess.run(
                 command,
                 shell=True,
@@ -90,19 +106,26 @@ class ShellTool:
         """
 
         @tool
-        def bash(command: str, timeout: int = 60) -> str:
+        def bash(command: str, timeout: Optional[int] = 120) -> str:
             """
             Execute a shell command (Bash).
 
             Use this tool for:
-            - File system operations: ls, cd, pwd, mkdir, mv, cp
+            - File system navigation: ls, pwd, mkdir, mv, cp
             - Git operations: git status, add, commit, push, pull, checkout
             - Running scripts: ./script.sh, python main.py
-            - System tools: grep, find, cat (for small checks)
+            - Package management: npm, pip, uv
+
+            PREFER FILE TOOLS instead of bash for:
+            - Reading files: Use Read (not cat/head/tail)
+            - Searching content: Use Grep (not grep/rg)
+            - Finding files: Use Glob (not find)
+            - Editing files: Use Edit (not sed/awk)
+            - Writing files: Use Write (not echo/cat redirects)
 
             Args:
                 command: The bash command to execute
-                timeout: Command timeout in seconds (default: 60)
+                timeout: Command timeout in seconds (default: 120, max: 600)
             """
             result = self.run(command, timeout=timeout)
             if result["success"]:

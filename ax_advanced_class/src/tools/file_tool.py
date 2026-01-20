@@ -1,12 +1,18 @@
 """
 File Operation Tools
 
-Provides specialized tools for file manipulation:
-- read: Read file contents (text)
-- write: Create or overwrite files
-- edit: Exact string replacement in files
-- glob: Find files by pattern
-- grep: Search file contents with regex
+Provides specialized tools for file manipulation.
+ALWAYS PREFER these tools over bash equivalents for file operations.
+
+Available tools:
+- read: Read file contents (PREFER over cat/head/tail)
+- write: Create or overwrite files (PREFER over echo/cat redirects)
+- edit: Exact string replacement in files (PREFER over sed/awk)
+- glob: Find files by pattern (PREFER over find)
+- grep: Search file contents with regex (PREFER over grep/rg)
+
+These tools are purpose-built, safer, and provide better validation
+than their bash command equivalents.
 """
 
 import os
@@ -26,6 +32,19 @@ class FileOperationTool:
     """
     File operation tools with permission control.
     """
+
+    # Tool names exposed by this class
+    _TOOL_NAMES = ("read", "write", "edit", "glob", "grep")
+
+    @staticmethod
+    def get_tool_names() -> tuple[str, ...]:
+        """
+        Return names of all LangChain tools provided by this class.
+
+        This is a static method to allow ToolValidationMiddleware to
+        check tool names without instantiating the tool.
+        """
+        return FileOperationTool._TOOL_NAMES
 
     def read_file(self, validated_path: str, encoding: str = "utf-8") -> dict:
         """Read the contents of a file."""
@@ -129,7 +148,7 @@ class FileOperationTool:
             # This is a read operation, so it should be allowed generally
             # But we must validate paths. 'path' arg is relative to workspace.
 
-            # Since we have ShellTool for general commands, maybe Grep should be there?
+            # Since we have BashTool for general commands, maybe Grep should be there?
             # But the user requested "Grep" as a tool alongside "Read/Write".
             # We can implement it using python to avoid shell injection risks or rely on validated shell.
             # Let's use python for consistency with "FileOperationTool".
