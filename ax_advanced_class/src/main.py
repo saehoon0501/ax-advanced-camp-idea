@@ -12,40 +12,19 @@ import os
 import asyncio
 from typing import Optional
 
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.live import Live
-from rich.text import Text
-from rich.theme import Theme
-
-from ax_advanced_class.src.orchestrator import (
-    create_orchestrator,
-    LongRunningOrchestrator,
-)
+from ax_advanced_class.src.orchestrator import create_orchestrator
 from ax_advanced_class.src.llm.bedrock_client import BedrockClient, LLMConfig
 from ax_advanced_class.src.tools import (
     FileOperationTool,
     BashTool,
 )
 from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
-
-
-# Custom theme similar to Claude Code CLI
-custom_theme = Theme(
-    {
-        "info": "dim cyan",
-        "warning": "yellow",
-        "error": "bold red",
-        "success": "bold green",
-        "tool": "yellow",
-        "thinking": "dim white",
-        "prompt": "bold blue",
-        "agent": "magenta",
-    }
+from ax_advanced_class.src.ui import (
+    console,
+    print_welcome,
+    print_status,
+    run_streaming_session,
 )
-
-console = Console(theme=custom_theme)
 
 
 def create_llm(model_id: Optional[str] = None):
@@ -75,136 +54,12 @@ def create_tools(
     return tools
 
 
-def print_welcome():
-    """Print the welcome banner."""
-    console.print()
-    console.print(
-        Panel.fit(
-            "[bold]Incubation Camp CLI[/bold]\n" "[dim]Long-running agent harness based on Anthropic's architecture[/dim]",
-            border_style="blue",
-        )
-    )
-    console.print()
-    console.print("[dim]Commands:[/dim]")
-    console.print("  [bold]/init[/bold] <name> <description>  - Initialize a new project")
-    console.print("  [bold]/status[/bold]                     - Show current project status")
-    console.print("  [bold]/run[/bold]                        - Run the next coding session")
-    console.print("  [bold]/workspace[/bold] <path>           - Set workspace path")
-    console.print("  [bold]exit[/bold] or [bold]quit[/bold]               - Exit the CLI")
-    console.print()
-
-
-def print_status(orchestrator: LongRunningOrchestrator, config: dict, workspace: str):
-    """Print current project status."""
-    state = orchestrator.get_state(config)
-
-    console.print()
-    console.print("[bold]Project Status[/bold]", style="info")
-    console.print(f"  Workspace: [dim]{os.path.abspath(workspace)}[/dim]")
-
-    if state:
-        console.print(f"  Project: [bold]{state.get('project_name', 'N/A')}[/bold]")
-        console.print(f"  Initialized: {'[green]Yes[/green]' if state.get('is_initialized') else '[yellow]No[/yellow]'}")
-        console.print(f"  Sessions: {state.get('session_count', 0)}")
-
-        features = state.get("feature_list", [])
-        if features:
-            completed = sum(1 for f in features if f.get("passes", False))
-            console.print(f"  Features: {completed}/{len(features)} completed")
-    else:
-        console.print("  [dim]No active project. Use /init to start.[/dim]")
-    console.print()
-
-
-async def run_streaming_session(
-    orchestrator: LongRunningOrchestrator,
-    project_name: str,
-    project_description: str,
-    repository_path: str,
-):
-    """Run a streaming session and display events in Claude Code style."""
-    console.print()
-
-    current_tool = None
-    streaming_content = ""
-
-    with Live(console=console, refresh_per_second=10, transient=True) as live:
-        live.update(Text("Thinking...", style="thinking"))
-
-        async for event in orchestrator.astream_events(
-            project_name=project_name,
-            project_description=project_description,
-            repository_path=repository_path,
-        ):
-            event_type = event.get("event", "")
-            node = event.get("langgraph_node") or event.get("name") or ""
-            data = event.get("data", {}) or {}
-
-            # Handle tool start
-            if event_type == "on_tool_start":
-                tool_name = data.get("name") or event.get("name") or "unknown"
-                tool_input = data.get("input", {})
-                current_tool = tool_name
-
-                # Format tool input for display
-                input_preview = str(tool_input)[:100]
-                if len(str(tool_input)) > 100:
-                    input_preview += "..."
-
-                live.update(Text(f"Executing: {tool_name}", style="tool"))
-
-            # Handle tool end
-            elif event_type == "on_tool_end":
-                output = data.get("output", "")
-                output_preview = str(output)[:200] if output else ""
-                if len(str(output)) > 200:
-                    output_preview += "..."
-
-                if current_tool:
-                    console.print(f"[tool]Tool:[/tool] {current_tool}")
-                    if output_preview:
-                        console.print(f"[dim]{output_preview}[/dim]")
-                    console.print()
-                current_tool = None
-                live.update(Text("Thinking...", style="thinking"))
-
-            # Handle streaming tokens
-            elif event_type in ("on_chat_model_stream", "on_llm_stream"):
-                chunk = data.get("chunk")
-                if chunk:
-                    text = ""
-                    if hasattr(chunk, "content"):
-                        text = chunk.content
-                    elif isinstance(chunk, dict):
-                        text = chunk.get("content", "")
-                    elif isinstance(chunk, str):
-                        text = chunk
-
-                    if text:
-                        streaming_content += text
-                        live.update(Text(streaming_content[-500:], style="white"))
-
-            # Handle chain events for agent transitions
-            elif event_type == "on_chain_start":
-                if node in ("initializer", "coding", "router"):
-                    console.print(f"[agent]Agent:[/agent] {node}")
-
-    # Print final content if any
-    if streaming_content:
-        console.print()
-        console.print(Markdown(streaming_content))
-
-    console.print()
-    console.print("[success]Session complete.[/success]")
-    console.print()
-
-
 def main():
     """Main CLI entry point - REPL loop."""
-    print_welcome()
-
     # Default settings
     workspace = "./workspace"
+
+    print_welcome(workspace)
     model_id = None
 
     # Project state
@@ -230,7 +85,7 @@ def main():
 
             # Help command
             if user_input.lower() in ("help", "/help", "?"):
-                print_welcome()
+                print_welcome(workspace)
                 continue
 
             # Init command: /init <name> <description>
