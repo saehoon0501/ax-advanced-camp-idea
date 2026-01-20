@@ -468,11 +468,17 @@ class ToolValidationMiddleware(AgentMiddleware):
 
     Facilitates validation in the agent lifecycle by intercepting tool calls
     and delegating validation to _BashValidator.
+
+    Features:
+    - Read-before-write/edit check: Existing files must be read before write/edit
+    - Stale read detection: Detects if a file was modified since last read
     """
 
     def __init__(self, config: PermissionConfig):
         self._validator = _BashValidator(config)
         self._config = config
+        # Track read files: {normalized_path: modification_time_at_read}
+        self._read_files: dict[str, float] = {}
 
     def wrap_tool_call(
         self,
@@ -520,6 +526,9 @@ class ToolValidationMiddleware(AgentMiddleware):
                     if not os.path.isabs(path):
                         path = os.path.join(self._config.workspace_root, path)
 
+                    # Get normalized path for tracking
+                    normalized_path = self._validator.get_normalized_path(path)
+
                     # Determine if this is a read or write operation
                     # read, grep, glob → read operations
                     # write, edit → write operations
@@ -544,16 +553,69 @@ class ToolValidationMiddleware(AgentMiddleware):
                                 status="error",
                             )
 
+                    # --- Read-before-write/edit check and stale read detection ---
+                    if is_write:
+                        file_exists = os.path.exists(normalized_path)
+
+                        if file_exists:
+                            # Check if file was read first
+                            if normalized_path not in self._read_files:
+                                operation = "writing to" if tool_name == "write" else "editing"
+                                return ToolMessage(
+                                    content=f"Error: You must read the file first before {operation} it. Use the Read tool first.",
+                                    tool_call_id=tool_call_id,
+                                    status="error",
+                                )
+
+                            # Check for stale read (file modified since last read)
+                            try:
+                                current_mtime = os.path.getmtime(normalized_path)
+                                read_mtime = self._read_files[normalized_path]
+                                if current_mtime > read_mtime:
+                                    operation = "writing to" if tool_name == "write" else "editing"
+                                    return ToolMessage(
+                                        content=f"Error: File has been modified since you last read it. Please read the file again before {operation} it.",
+                                        tool_call_id=tool_call_id,
+                                        status="error",
+                                    )
+                            except OSError:
+                                pass  # File might have been deleted
+
                     # Update with normalized path
-                    args[path_key] = self._validator.get_normalized_path(path)
+                    args[path_key] = normalized_path
 
             # If validation passes, proceed to next middleware or tool call
-            result = handler(request)
+            handler_result = handler(request)
+
+            # --- Track reads after successful read operations ---
+            if tool_name == "read":
+                if isinstance(handler_result, ToolMessage) and handler_result.status != "error":
+                    # Track the read
+                    if "path" in args or "validated_path" in args:
+                        path_key = "validated_path" if "validated_path" in args else "path"
+                        normalized_path = self._validator.get_normalized_path(args[path_key])
+                        try:
+                            mtime = os.path.getmtime(normalized_path)
+                            self._read_files[normalized_path] = mtime
+                        except OSError:
+                            pass  # File might not exist
+
+            # --- Update tracking after successful write/edit ---
+            if tool_name in ("write", "edit"):
+                if isinstance(handler_result, ToolMessage) and handler_result.status != "error":
+                    # Update the tracked mtime after successful write/edit
+                    if "path" in args or "validated_path" in args:
+                        path_key = "validated_path" if "validated_path" in args else "path"
+                        normalized_path = self._validator.get_normalized_path(args[path_key])
+                        try:
+                            self._read_files[normalized_path] = os.path.getmtime(normalized_path)
+                        except OSError:
+                            pass
 
             # Apply output truncation (hard limit)
-            result = self._truncate_output(result)
+            handler_result = self._truncate_output(handler_result)
 
-            return result
+            return handler_result
 
         except Exception as e:
             return ToolMessage(

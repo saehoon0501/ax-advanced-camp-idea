@@ -161,9 +161,11 @@ class PermissionConfig:
     )
 
     # Git subcommands that are ALLOWED
+    # Note: Dangerous patterns like "push --force origin main" are blocked via blocked_argument_patterns
     allowed_git_subcommands: FrozenSet[str] = field(
         default_factory=lambda: frozenset(
             {
+                # Read-only operations
                 "status",
                 "log",
                 "diff",
@@ -171,8 +173,15 @@ class PermissionConfig:
                 "branch",
                 "tag",
                 "remote",
-                "fetch",
                 "stash",
+                # Standard workflow operations
+                "add",
+                "commit",
+                "checkout",
+                "fetch",
+                "pull",
+                "push",
+                # Config (global changes blocked via blocked_argument_patterns)
                 "config",
             }
         )

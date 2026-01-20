@@ -108,7 +108,8 @@ class BashTool:
         @tool
         def bash(command: str, timeout: Optional[int] = 120) -> str:
             """
-            Execute a shell command in a persistent bash session.
+            Executes a given bash command in a persistent shell session with optional timeout,
+            ensuring proper handling and security measures.
 
             USE THIS TOOL FOR:
             - Git operations: git status, add, commit, push, pull, checkout, diff, log
@@ -116,23 +117,29 @@ class BashTool:
             - Running scripts/tests: pytest, npm test, python script.py
             - System commands: ls, pwd, mkdir, mv, cp
 
-            DO NOT USE THIS TOOL FOR (use File Tools instead):
+            PREFER FILE TOOLS OVER BASH FOR:
             - Reading files: Use Read tool (not cat/head/tail)
             - Searching content: Use Grep tool (not grep/rg)
             - Finding files: Use Glob tool (not find)
             - Editing files: Use Edit tool (not sed/awk)
             - Writing files: Use Write tool (not echo/cat redirects)
 
-            Git Safety Rules:
-            - NEVER use: git push --force, git reset --hard, --no-verify
+            GIT SAFETY PROTOCOL:
+            - NEVER update git config
+            - NEVER run destructive/irreversible commands (push --force, hard reset, etc.)
+            - NEVER skip hooks (--no-verify, --no-gpg-sign) unless explicitly requested
             - NEVER commit unless user explicitly asks
             - NEVER use -i flag (interactive commands not supported)
             - Use HEREDOC for commit messages with special characters
 
-            Command Chaining:
-            - Use && for dependent sequential commands
-            - Use ; for independent sequential commands
+            COMMAND CHAINING:
+            - Use && for dependent sequential commands (mkdir foo && cd foo)
+            - Use ; for independent sequential commands (not caring if earlier fails)
             - DO NOT use newlines to separate commands
+
+            WORKING DIRECTORY:
+            - Maintain current working directory throughout the session
+            - Use absolute paths instead of cd when possible
 
             Args:
                 command: The bash command to execute
