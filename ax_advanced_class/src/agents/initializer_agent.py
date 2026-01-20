@@ -23,7 +23,7 @@ from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
 from ax_advanced_class.src.prompts import initializer_agent_dynamic_prompt
-from ax_advanced_class.src.tools import ShellTool, FileOperationTool
+from ax_advanced_class.src.tools import BashTool, FileOperationTool
 
 
 def create_initializer_agent(
@@ -49,7 +49,7 @@ def create_initializer_agent(
     Returns:
         Compiled agent graph (CompiledStateGraph)
     """
-    tools = [ShellTool().get_langchain_tools()]
+    tools = [BashTool().get_langchain_tools()]
     tools.extend(FileOperationTool().get_langchain_tools())
     # Use default dynamic prompt middleware if none provided
     agent_middleware = (

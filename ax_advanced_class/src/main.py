@@ -25,9 +25,8 @@ from ax_advanced_class.src.orchestrator import (
 )
 from ax_advanced_class.src.llm.bedrock_client import BedrockClient, LLMConfig
 from ax_advanced_class.src.tools import (
-    PermissionLevel,
     FileOperationTool,
-    ShellTool,
+    BashTool,
 )
 from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
 
@@ -60,20 +59,18 @@ def create_llm(model_id: Optional[str] = None):
 
 def create_tools(
     workspace_path: str = "./workspace",
-    permission_level: PermissionLevel = PermissionLevel.STANDARD,
 ) -> list:
     """Create tools for the agents with permission control."""
     config = PermissionConfig(
         workspace_root=os.path.abspath(workspace_path),
-        permission_level=permission_level,
     )
 
-    file_tool = FileOperationTool(config=config)
-    shell_tool = ShellTool(config=config)
+    file_tool = FileOperationTool()
+    bash_tool = BashTool(config=config)
 
     tools = []
     tools.extend(file_tool.get_langchain_tools())
-    tools.extend(shell_tool.get_langchain_tools())
+    tools.extend(bash_tool.get_langchain_tools())
 
     return tools
 
@@ -209,7 +206,6 @@ def main():
     # Default settings
     workspace = "./workspace"
     model_id = None
-    permission_level = PermissionLevel.STANDARD
 
     # Project state
     project_name = None
@@ -256,7 +252,6 @@ def main():
                     llm = create_llm(model_id=model_id)
                     tools = create_tools(
                         workspace_path=workspace,
-                        permission_level=permission_level,
                     )
                     os.makedirs(workspace, exist_ok=True)
                     orchestrator = create_orchestrator(llm=llm, tools=tools)
