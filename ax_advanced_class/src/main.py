@@ -25,6 +25,7 @@ from ax_advanced_class.src.ui import (
     print_welcome,
     print_status,
     run_streaming_session,
+    print_prompt,
 )
 
 
@@ -72,9 +73,7 @@ def main():
 
     while True:
         try:
-            console.rule(style="dim")
-            prompt_text = "[prompt]>[/prompt] "
-            user_input = console.input(prompt_text).strip()
+            user_input = print_prompt()
             interrupt_count = 0
 
             if not user_input:
@@ -136,34 +135,26 @@ def main():
                     console.print(f"[info]Workspace set to:[/info] {os.path.abspath(workspace)}")
                 continue
 
-            # Run command
-            if user_input.lower() in ("/run", "run"):
-                if not orchestrator or not project_name:
-                    console.print("[error]No project initialized. Use /init first.[/error]")
-                    continue
+            # Run prompt(default)
+            console.print()
+            console.print(f"[info]Starting session for:[/info] {project_name}")
 
-                console.print()
-                console.print(f"[info]Starting session for:[/info] {project_name}")
+            # Generate unique thread_id for this session
+            thread_id = f"session_{uuid.uuid4().hex[:8]}"
+            config = {"configurable": {"thread_id": thread_id}}
+            console.print(f"[dim]Thread ID: {thread_id}[/dim]")
 
-                # Generate unique thread_id for this session
-                thread_id = f"session_{uuid.uuid4().hex[:8]}"
-                config = {"configurable": {"thread_id": thread_id}}
-                console.print(f"[dim]Thread ID: {thread_id}[/dim]")
-
-                # Run the async streaming session
-                asyncio.run(
-                    run_streaming_session(
-                        orchestrator=orchestrator,
-                        project_name=project_name,
-                        project_description=project_description,
-                        repository_path=workspace,
-                        config=config,
-                    )
+            # Run the async streaming session
+            asyncio.run(
+                run_streaming_session(
+                    orchestrator=orchestrator,
+                    project_name=project_name,
+                    project_description=project_description,
+                    repository_path=workspace,
+                    config=config,
                 )
-                continue
-
-            # If no command matched, treat as a direct message (future: chat mode)
-            console.print("[dim]Unknown command. Type /help for available commands.[/dim]")
+            )
+            continue
 
         except KeyboardInterrupt:
             console.print()

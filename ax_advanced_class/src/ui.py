@@ -9,6 +9,7 @@ import os
 from typing import Optional
 
 from rich.console import Console
+from rich.control import Control
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.live import Live
@@ -76,6 +77,20 @@ def print_welcome(workspace: str = "./workspace"):
         )
     )
     console.print()
+
+
+def print_prompt():
+    console.rule(style="dim")
+    console.print()
+    console.rule(style="dim")
+
+    console.print(Control.move(0, -2))
+
+    prompt_text = "[prompt]>[/prompt] "
+    user_input = console.input(prompt_text).strip()
+
+    console.print(Control.move(0, 1))
+    return user_input
 
 
 def print_status(orchestrator: LongRunningOrchestrator, config: dict, workspace: str):
