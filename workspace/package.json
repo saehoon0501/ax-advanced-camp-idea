@@ -1,13 +1,13 @@
 {
   "name": "hello-world-printer",
   "version": "1.0.0",
-  "description": "A simple Hello World printer in Node.js",
+  "description": "A simple hello world printer in Node.js",
   "main": "hello.js",
   "scripts": {
     "start": "node hello.js",
-    "hello": "node hello.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["hello", "world", "nodejs", "printer"],
+  "keywords": ["hello", "world", "nodejs"],
   "author": "",
   "license": "MIT"
 }

@@ -4,17 +4,14 @@
  * Simple Hello World printer in Node.js
  */
 
-console.log('Hello, World!');
-
-// Optional: Add some additional functionality
-function printHello(name = 'World') {
-    console.log(`Hello, ${name}!`);
+function printHelloWorld() {
+    console.log("Hello, World!");
 }
 
-// If command line arguments are provided, use them
-if (process.argv.length > 2) {
-    const name = process.argv.slice(2).join(' ');
-    printHello(name);
-} else {
-    printHello();
-}
+// Print Hello World
+printHelloWorld();
+
+// You can also print with additional formatting
+console.log("=".repeat(20));
+console.log("🌍 Hello from Node.js! 🌍");
+console.log("=".repeat(20));
