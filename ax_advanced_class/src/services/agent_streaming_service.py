@@ -67,6 +67,7 @@ class AgentStreamingService:
         project_name: str,
         project_description: str,
         repository_path: str,
+        message_history: Optional[list] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream events for a user message.
@@ -76,6 +77,7 @@ class AgentStreamingService:
             project_name: Name of the project
             project_description: Description of the project
             repository_path: Path to the repository
+            message_history: Optional conversation history (list of {role, content} dicts)
 
         Yields:
             StreamEvent objects for the UI to display
@@ -84,12 +86,14 @@ class AgentStreamingService:
         self._last_project_name = project_name
         self._last_project_description = project_description
         self._last_repository_path = repository_path
+        self._last_message_history = message_history
 
         async for event in self._arun_stream(
             user_message=user_message,
             project_name=project_name,
             project_description=project_description,
             repository_path=repository_path,
+            message_history=message_history,
         ):
             yield event
 
@@ -113,12 +117,14 @@ class AgentStreamingService:
         project_description: Optional[str] = None,
         repository_path: Optional[str] = None,
         resume_value: Optional[bool] = None,
+        message_history: Optional[list] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Internal method that handles streaming and interrupt detection."""
         # Use stored values for resume
         project_name = project_name or self._last_project_name or "default-project"
         project_description = project_description or self._last_project_description or "A default project"
         repository_path = repository_path or self._last_repository_path or "./workspace"
+        message_history = message_history or getattr(self, "_last_message_history", None)
 
         try:
             async for raw_event in self.orchestrator.astream_events(
@@ -128,6 +134,7 @@ class AgentStreamingService:
                 config=self.config,
                 resume_value=resume_value,
                 user_message=user_message,
+                message_history=message_history,
             ):
                 stream_event = self._transform_event(raw_event)
                 if stream_event:

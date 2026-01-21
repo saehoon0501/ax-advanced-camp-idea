@@ -60,7 +60,7 @@ def create_tools(
 
 
 def main():
-    """Main CLI entry point - REPL loop."""
+    """Main CLI entry point - Stateful REPL loop."""
     # Default settings
     workspace = "./workspace"
     project_name = "default-project"
@@ -77,7 +77,18 @@ def main():
     console.print("[success]Ready![/success]")
     console.print()
 
-    config = {"configurable": {"thread_id": "cli-session"}}
+    # Create a single session for the entire run
+    session_id = f"session_{uuid.uuid4().hex[:8]}"
+    config = {"configurable": {"thread_id": session_id}}
+    console.print(f"[dim]Session: {session_id}[/dim]")
+    console.print()
+
+    # Create service once with persistent config
+    service = AgentStreamingService(orchestrator=orchestrator, config=config)
+
+    # Conversation history - only user inputs and final responses
+    conversation_history: list[dict] = []
+
     interrupt_count = 0
 
     while True:
@@ -93,78 +104,22 @@ def main():
                 console.print("[dim]Goodbye![/dim]")
                 break
 
-            # # Help command
-            # if user_input.lower() in ("help", "/help", "?"):
-            #     print_welcome(workspace)
-            #     continue
-
-            # # Init command: /init <name> <description>
-            # if user_input.startswith("/init"):
-            #     parts = user_input.split(maxsplit=2)
-            #     if len(parts) < 3:
-            #         console.print("[error]Usage: /init <project_name> <description>[/error]")
-            #         continue
-
-            #     project_name = parts[1]
-            #     project_description = parts[2]
-
-            #     console.print()
-            #     console.print(f"[info]Initializing project:[/info] {project_name}")
-            #     console.print(f"[dim]{project_description}[/dim]")
-
-            #     # Create LLM and tools
-            #     with console.status("[thinking]Setting up LLM and tools...[/thinking]"):
-            #         llm = create_llm(model_id=model_id)
-            #         tools = create_tools(
-            #             workspace_path=workspace,
-            #         )
-            #         os.makedirs(workspace, exist_ok=True)
-            #         orchestrator = create_orchestrator(llm=llm)
-
-            #     console.print(f"[success]Ready![/success] Loaded {len(tools)} tools")
-            #     console.print("[dim]Use /run to start the session[/dim]")
-            #     console.print()
-            #     continue
-
-            # # Status command
-            # if user_input.lower() in ("/status", "status"):
-            #     if orchestrator:
-            #         print_status(orchestrator, config, workspace)
-            #     else:
-            #         console.print("[dim]No project initialized. Use /init first.[/dim]")
-            #     continue
-
-            # # Workspace command
-            # if user_input.startswith("/workspace"):
-            #     parts = user_input.split(maxsplit=1)
-            #     if len(parts) < 2:
-            #         console.print(f"[info]Current workspace:[/info] {os.path.abspath(workspace)}")
-            #     else:
-            #         workspace = parts[1]
-            #         console.print(f"[info]Workspace set to:[/info] {os.path.abspath(workspace)}")
-            #     continue
-
             # Run session
             console.print()
-            console.print(f"[info]Starting session...[/info]")
 
-            # Generate unique thread_id for this session
-            thread_id = f"session_{uuid.uuid4().hex[:8]}"
-            config = {"configurable": {"thread_id": thread_id}}
-            console.print(f"[dim]Thread ID: {thread_id}[/dim]")
-
-            # Create service and run the streaming session
-            service = AgentStreamingService(orchestrator=orchestrator, config=config)
+            # Use a mutable container to capture session result
+            session_result = {"final_response": ""}
 
             async def run_session():
                 session = StreamingSession()
 
-                # Initial stream
+                # Stream with the persistent service, passing conversation history
                 event_generator = service.astream(
                     user_message=user_input,
                     project_name=project_name,
                     project_description=project_description,
                     repository_path=workspace,
+                    message_history=conversation_history,
                 )
                 final_event = await session.display_events(event_generator)
 
@@ -178,7 +133,16 @@ def main():
                 session.print_final_content()
                 print_session_complete()
 
+                # Capture final response for history
+                session_result["final_response"] = session.final_response
+
             asyncio.run(run_session())
+
+            # Append to conversation history
+            if session_result["final_response"]:
+                conversation_history.append({"role": "user", "content": user_input})
+                conversation_history.append({"role": "assistant", "content": session_result["final_response"]})
+
             continue
 
         except KeyboardInterrupt:

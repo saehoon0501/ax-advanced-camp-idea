@@ -145,9 +145,22 @@ async def handle_streaming_token_event(
         text = chunk
 
     if text and isinstance(text, str):
-        # Just log a summary or the token content (might be verbose)
-        # _get_logger().debug(f"[Token] Node: {node}, Text: {text}")
-        pass
+        _get_logger().debug(f"[Token] Node: {node}, Text: {text[:100]}")
+
+
+async def handle_tool_end_event(
+    node: str,
+    data: Dict[str, Any],
+) -> None:
+    """Handle tool end events.
+
+    Args:
+        node: The node name
+        data: The event data
+    """
+    output = data.get("output", "")
+    output_str = str(output)[:500]  # Truncate for logging
+    _get_logger().info(f"[Tool End] Node: {node}, Output: {output_str}")
 
 
 async def process_stream_event(
@@ -175,11 +188,14 @@ async def process_stream_event(
     if event_type == "on_chain_start":
         await handle_chain_start_event(node, chain_stack)
 
+    elif event_type == "on_chain_end":
+        await handle_chain_end_event(node, data, chain_stack)
+
     elif event_type == "on_tool_start":
         await handle_tool_start_event(node, data, chain_stack, event_stream)
 
-    elif event_type == "on_chain_end":
-        await handle_chain_end_event(node, data, chain_stack)
+    elif event_type == "on_tool_end":
+        await handle_tool_end_event(node, data)
 
     elif event_type in ("on_chat_model_stream", "on_llm_stream"):
         await handle_streaming_token_event(data, chain_stack, node)

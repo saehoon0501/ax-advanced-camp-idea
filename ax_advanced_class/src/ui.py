@@ -123,6 +123,7 @@ class StreamingSession:
     def __init__(self):
         self.streaming_content = ""
         self.current_tool = None
+        self.final_response = ""  # Track the final response for history
 
     async def display_events(
         self, event_generator: AsyncGenerator[StreamEvent, None]
@@ -164,11 +165,15 @@ class StreamingSession:
                     # Show routing decisions with dim styling
                     if event.content:
                         console.print(f"[dim]{event.content}[/dim]")
+                        # Track as final response (strip prefix if present)
+                        self._update_final_response(event.content)
 
                 elif event.type == "message":
                     # Show agent messages with dim styling
                     if event.content:
                         console.print(f"[dim]{event.content}[/dim]")
+                        # Track as final response (strip prefix if present)
+                        self._update_final_response(event.content)
 
                 elif event.type == "permission_required":
                     return event
@@ -181,6 +186,23 @@ class StreamingSession:
                     return event
 
         return None
+
+    def _update_final_response(self, content: str) -> None:
+        """Update final response, stripping agent prefixes and ignoring routing messages."""
+        if not content:
+            return
+        # Skip intermediate routing messages
+        if content.startswith("[Router] Routing to"):
+            return
+        # Strip agent prefixes
+        if content.startswith("[Router] "):
+            self.final_response = content[9:]
+        elif content.startswith("[Initializer] "):
+            self.final_response = content[14:]
+        elif content.startswith("[Coding] "):
+            self.final_response = content[9:]
+        else:
+            self.final_response = content
 
     def print_final_content(self):
         """Print accumulated streaming content as markdown."""

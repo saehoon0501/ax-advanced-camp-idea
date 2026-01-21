@@ -72,9 +72,13 @@ class RouterDecision(BaseModel):
     """Structured output for router decisions."""
 
     route: Literal["initializer", "coding", "finish"] = Field(
-        description="The agent to route to: 'initializer' for project setup, 'coding' for feature implementation, 'finish' when done"
+        description="The agent to route to: 'initializer' for project setup, 'coding' for feature implementation, 'finish' for general questions or when done"
     )
     reason: str = Field(description="Brief explanation for the routing decision")
+    response: Optional[str] = Field(
+        default=None,
+        description="Direct response for general/non-coding questions (only when route='finish' for general questions)"
+    )
 
 
 ROUTER_SYSTEM_PROMPT = """You are a routing agent that decides which specialized agent should handle the current task.
@@ -82,7 +86,11 @@ ROUTER_SYSTEM_PROMPT = """You are a routing agent that decides which specialized
 Based on the user's message and conversation history, decide:
 - "initializer": Route here ONLY on the first request when project needs initial setup
 - "coding": Route here ONLY on the first request when code needs to be written
-- "finish": Route here when an agent has already responded (messages from [Router], [Initializer], or [Coding] indicate work is done)
+- "finish": Route here when:
+  1. An agent has already responded (messages from [Router], [Initializer], or [Coding] indicate work is done)
+  2. The user asks a general question NOT related to software engineering or coding (e.g., greetings like "hello", "how are you?", or general knowledge questions like "what's the tallest building?")
+
+For general questions (case 2), provide a friendly direct response in the "response" field.
 
 IMPORTANT: If you see messages starting with [Router], [Initializer], or [Coding] in the conversation, the task has been handled. Route to "finish".
 
@@ -208,10 +216,15 @@ Conversation history:
 
         route = route_map.get(decision.route, AgentRoute.FINISH)
 
-        # Return routing decision with a message explaining the decision
+        # Build message content - include response for general questions
+        if decision.response:
+            message_content = f"[Router] {decision.response}"
+        else:
+            message_content = f"[Router] Routing to {decision.route}: {decision.reason}"
+
         return {
             "next_agent": route,
-            "messages": [AIMessage(content=f"[Router] Routing to {decision.route}: {decision.reason}")],
+            "messages": [AIMessage(content=message_content)],
         }
 
     def _route_decision(self, state: OrchestratorState) -> AgentRoute:
@@ -280,6 +293,7 @@ Conversation history:
         config: Optional[dict] = None,
         resume_value: Optional[Any] = None,
         user_message: Optional[str] = None,
+        message_history: Optional[list] = None,
     ):
         """
         Async stream events with the custom stream_event_handler.
@@ -292,6 +306,7 @@ Conversation history:
             resume_value: If provided, resume from interrupt with this value
                          (typically True/False for permission approval)
             user_message: The user's input message to process
+            message_history: Optional conversation history (list of {role, content} dicts)
         """
         from ax_advanced_class.src.utils.stream_event_handler import (
             process_stream_event,
@@ -311,12 +326,22 @@ Conversation history:
             # Resume from interrupt with the provided value
             stream_input = Command(resume=resume_value)
         else:
-            # Build initial messages from user input
+            # Build messages from history and current user input
             messages = []
+
+            # Add conversation history
+            if message_history:
+                for msg in message_history:
+                    if msg.get("role") == "user":
+                        messages.append(HumanMessage(content=msg.get("content", "")))
+                    elif msg.get("role") == "assistant":
+                        messages.append(AIMessage(content=msg.get("content", "")))
+
+            # Add current user message
             if user_message:
                 messages.append(HumanMessage(content=user_message))
 
-            # Initial run with state including user message
+            # Initial run with state including messages
             stream_input: OrchestratorState = {
                 "messages": messages,
                 "project_name": project_name,
