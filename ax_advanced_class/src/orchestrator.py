@@ -76,8 +76,7 @@ class RouterDecision(BaseModel):
     )
     reason: str = Field(description="Brief explanation for the routing decision")
     response: Optional[str] = Field(
-        default=None,
-        description="Direct response for general/non-coding questions (only when route='finish' for general questions)"
+        default=None, description="Direct response for general/non-coding questions (only when route='finish' for general questions)"
     )
 
 
@@ -234,26 +233,18 @@ Conversation history:
     def _initializer_node(self, state: OrchestratorState) -> dict:
         """
         Initializer agent node.
-
-        TODO: Will invoke the initializer agent with project context.
-        For now, returns a simple response to test the flow.
         """
-        # Simple response for testing the flow
-        return {
-            "messages": [AIMessage(content="[Initializer] Project initialization complete.")],
-        }
+        result = self.initializer_agent.with_config(run_name="initializer").invoke({"messages": state.get("messages", [])})
+
+        return {"messages": [AIMessage(content=str(result["messages"][-1].content))]}
 
     def _coding_node(self, state: OrchestratorState) -> dict:
         """
         Coding agent node.
-
-        TODO: Will invoke the coding agent with project context.
-        For now, returns a simple response to test the flow.
         """
         # Simple response for testing the flow
-        return {
-            "messages": [AIMessage(content="[Coding] Coding session complete.")],
-        }
+        result = self.coding_agent.with_config(run_name="coding").invoke({"messages": state.get("messages", [])})
+        return {"messages": [AIMessage(content=str(result["messages"][-1].content))]}
 
     def invoke(
         self,

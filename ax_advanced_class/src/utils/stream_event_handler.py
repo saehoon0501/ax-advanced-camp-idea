@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from datetime import datetime
@@ -57,6 +58,78 @@ def _get_logger() -> logging.Logger:
         # Fallback to default logger if session not initialized
         return init_session_logger("default")
     return _current_logger
+
+
+def _safe_serialize(obj: Any, max_length: int = 500) -> str:
+    """Safely serialize an object to JSON string for logging.
+
+    Args:
+        obj: Object to serialize
+        max_length: Maximum length of serialized string (0 for no limit)
+
+    Returns:
+        JSON string representation or repr() fallback
+    """
+    try:
+        # Handle common LangChain message types
+        if hasattr(obj, "dict"):
+            serialized = json.dumps(obj.dict(), default=str, ensure_ascii=False)
+        elif hasattr(obj, "__dict__"):
+            serialized = json.dumps(obj.__dict__, default=str, ensure_ascii=False)
+        else:
+            serialized = json.dumps(obj, default=str, ensure_ascii=False)
+
+        if max_length > 0 and len(serialized) > max_length:
+            return serialized[:max_length] + "...[truncated]"
+        return serialized
+    except (TypeError, ValueError):
+        result = repr(obj)
+        if max_length > 0 and len(result) > max_length:
+            return result[:max_length] + "...[truncated]"
+        return result
+
+
+def _log_raw_event(event_stream: Dict[str, Any]) -> None:
+    """Log raw event with all fields for debugging.
+
+    Based on LangChain BaseStreamEvent schema:
+    - event: Event type (on_chain_start, on_tool_end, etc.)
+    - name: Name of the runnable
+    - run_id: Unique UUID for the run
+    - tags: List of tags
+    - metadata: Contains langgraph_node, langgraph_step, etc.
+    - data: Payload (input/chunk/output depending on lifecycle)
+    """
+    # Skip noisy streaming events
+    event_type = event_stream.get("event", "")
+    if event_type in ("on_chat_model_stream", "on_llm_stream", "on_chain_stream"):
+        return
+
+    logger = _get_logger()
+    name = event_stream.get("name", "")
+    run_id = event_stream.get("run_id", "")
+    tags = event_stream.get("tags", [])
+    metadata = event_stream.get("metadata", {})
+    data = event_stream.get("data", {})
+
+    # Extract LangGraph-specific metadata
+    langgraph_node = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
+    langgraph_step = metadata.get("langgraph_step", "") if isinstance(metadata, dict) else ""
+
+    # Log structured summary
+    logger.info(
+        f"[RAW EVENT] "
+        f"event={event_type} | "
+        f"name={name} | "
+        f"node={langgraph_node} | "
+        f"step={langgraph_step} | "
+        f"run_id={str(run_id)[:8]}..."
+    )
+
+    # Log data payload separately (no truncation)
+    if data:
+        data_full = _safe_serialize(data, max_length=0)
+        logger.info(f"[RAW EVENT DATA] {data_full}")
 
 async def handle_chain_start_event(
     node: str, chain_stack: List[Dict[str, Any]]
@@ -168,21 +241,24 @@ async def process_stream_event(
     chain_stack: List[Dict[str, Any]],
 ) -> None:
     """Orchestrator function that routes stream events to appropriate handlers.
-    
+
     Args:
         event_stream: The raw event stream from LangGraph
         chain_stack: Mutable list tracking the chain stack state
     """
+    # Log raw event first for debugging
+    _log_raw_event(event_stream)
+
     event_type = event_stream.get("event") or ""
+    metadata = event_stream.get("metadata", {}) or {}
+
+    # Prefer langgraph_node from metadata (more reliable)
     node = (
-        event_stream.get("langgraph_node")
+        metadata.get("langgraph_node")
         or event_stream.get("name")
-        or event_stream.get("node_name")
         or "unknown"
     )
     data = event_stream.get("data", {}) or {}
-
-    _get_logger().debug(f"Processing event: {event_type} for node: {node}")
 
     # Route to appropriate event handler
     if event_type == "on_chain_start":

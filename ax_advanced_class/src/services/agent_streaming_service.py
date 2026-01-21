@@ -12,20 +12,16 @@ from typing import Any, AsyncGenerator, Dict, Literal, Optional
 from ax_advanced_class.src.orchestrator import LongRunningOrchestrator
 
 
-# Only emit events from these nodes
-ALLOWED_NODES = {"router", "initializer", "coding"}
-
-
 EventType = Literal[
-    "thinking",           # LLM is processing
-    "token",              # Streaming text token
-    "tool_call",          # Tool is being called
-    "tool_result",        # Tool returned result
-    "agent_transition",   # Moving to a new agent
-    "message",            # Complete message from agent
-    "permission_required", # Interrupt - needs user approval
-    "complete",           # Workflow finished
-    "error",              # Error occurred
+    "thinking",  # LLM is processing
+    "token",  # Streaming text token
+    "tool_call",  # Tool is being called
+    "tool_result",  # Tool returned result
+    "agent_transition",  # Moving to a new agent
+    "message",  # Complete message from agent
+    "permission_required",  # Interrupt - needs user approval
+    "complete",  # Workflow finished
+    "error",  # Error occurred
 ]
 
 
@@ -166,17 +162,8 @@ class AgentStreamingService:
             StreamEvent or None if the event should be filtered out
         """
         event_type = raw_event.get("event", "")
-        node = (
-            raw_event.get("langgraph_node")
-            or raw_event.get("name")
-            or raw_event.get("node_name")
-            or "unknown"
-        )
+        node = raw_event.get("langgraph_node") or raw_event.get("name") or raw_event.get("node_name") or "unknown"
         data = raw_event.get("data", {}) or {}
-
-        # Filter out events from nodes not in ALLOWED_NODES
-        if node not in ALLOWED_NODES:
-            return None
 
         # Route to appropriate transformation
         if event_type == "on_chain_start":
@@ -229,9 +216,7 @@ class AgentStreamingService:
 
         return None
 
-    def _transform_tool_start(
-        self, node: str, data: Dict[str, Any], raw_event: Dict[str, Any]
-    ) -> StreamEvent:
+    def _transform_tool_start(self, node: str, data: Dict[str, Any], raw_event: Dict[str, Any]) -> StreamEvent:
         """Transform on_tool_start event."""
         tool_name = data.get("name") or raw_event.get("name") or "unknown_tool"
         tool_input = data.get("input") or raw_event.get("tool_input") or {}
@@ -294,10 +279,7 @@ class AgentStreamingService:
             content = obj.content
             if isinstance(content, list):
                 # Handle multimodal content
-                return "".join(
-                    item.get("text", "") if isinstance(item, dict) else str(item)
-                    for item in content
-                )
+                return "".join(item.get("text", "") if isinstance(item, dict) else str(item) for item in content)
             elif isinstance(content, str):
                 return content
             else:
@@ -319,11 +301,7 @@ class AgentStreamingService:
             for task in state_snapshot.tasks:
                 if hasattr(task, "interrupts") and task.interrupts:
                     for interrupt_data in task.interrupts:
-                        interrupt_value = (
-                            interrupt_data.value
-                            if hasattr(interrupt_data, "value")
-                            else interrupt_data
-                        )
+                        interrupt_value = interrupt_data.value if hasattr(interrupt_data, "value") else interrupt_data
 
                         if isinstance(interrupt_value, dict):
                             question = interrupt_value.get("question", "Permission required")

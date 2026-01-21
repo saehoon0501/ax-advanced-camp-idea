@@ -104,6 +104,11 @@ def main():
                 console.print("[dim]Goodbye![/dim]")
                 break
 
+            # Clear the prompt lines to let the Live display take over
+            from ax_advanced_class.src.ui import clear_last_prompt_lines
+
+            clear_last_prompt_lines()
+
             # Run session
             console.print()
 
@@ -121,16 +126,16 @@ def main():
                     repository_path=workspace,
                     message_history=conversation_history,
                 )
-                final_event = await session.display_events(event_generator)
+                final_event = await session.display_events(event_generator, user_input)
 
                 # Handle permission requests with resume loop
                 while final_event and final_event.type == "permission_required":
                     is_approved = prompt_permission(final_event.content)
                     resume_generator = service.aresume(is_approved)
-                    final_event = await session.display_events(resume_generator)
+                    final_event = await session.display_events(resume_generator, user_input)
 
                 # Print final content and completion message
-                session.print_final_content()
+                session.print_final_content(user_input)
                 print_session_complete()
 
                 # Capture final response for history
