@@ -1,9 +1,62 @@
 import logging
+import os
+from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-# Configure a simple logger for this module
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Module-level logger reference
+_current_logger: Optional[logging.Logger] = None
+
+
+def init_session_logger(session_id: str) -> logging.Logger:
+    """
+    Initialize a file logger for a specific session.
+
+    Args:
+        session_id: Unique session identifier
+
+    Returns:
+        Configured logger for this session
+    """
+    global _current_logger
+
+    # Create a unique logger name for this session
+    logger_name = f"stream_event_handler.{session_id}"
+    logger = logging.getLogger(logger_name)
+
+    # Clear any existing handlers
+    logger.handlers.clear()
+    logger.setLevel(logging.INFO)
+
+    # Create logs directory if it doesn't exist
+    logs_dir = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    # Create log file with dd_mm_yyyy_session format
+    date_str = datetime.now().strftime("%d_%m_%Y")
+    log_file = os.path.join(logs_dir, f"{date_str}_{session_id}.log")
+
+    # File handler - logs everything to file
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
+    logger.addHandler(file_handler)
+
+    # Prevent propagation to root logger (no console output)
+    logger.propagate = False
+
+    _current_logger = logger
+    return logger
+
+
+def _get_logger() -> logging.Logger:
+    """Get the current session logger or a default one."""
+    global _current_logger
+    if _current_logger is None:
+        # Fallback to default logger if session not initialized
+        return init_session_logger("default")
+    return _current_logger
 
 async def handle_chain_start_event(
     node: str, chain_stack: List[Dict[str, Any]]
@@ -14,7 +67,7 @@ async def handle_chain_start_event(
         node: The node name
         chain_stack: Mutable list tracking the chain stack state
     """
-    logger.info(f"[Chain Start] Node: {node}")
+    _get_logger().info(f"[Chain Start] Node: {node}")
     chain_stack.append({"node": node})
 
 
@@ -34,7 +87,7 @@ async def handle_tool_start_event(
     """
     tool_name = data.get("name") or event_stream.get("name") or "unknown_tool"
     tool_input = data.get("input") or event_stream.get("tool_input") or {}
-    logger.info(f"[Tool Start] Tool: {tool_name}, Input: {tool_input}")
+    _get_logger().info(f"[Tool Start] Tool: {tool_name}, Input: {tool_input}")
 
 
 async def handle_chain_end_event(
@@ -54,7 +107,7 @@ async def handle_chain_end_event(
         chain_stack.pop()
     
     output = data.get("output")
-    logger.info(f"[Chain End] Node: {node}, Output: {output}")
+    _get_logger().info(f"[Chain End] Node: {node}, Output: {output}")
 
 
 async def handle_streaming_token_event(
@@ -93,7 +146,7 @@ async def handle_streaming_token_event(
 
     if text and isinstance(text, str):
         # Just log a summary or the token content (might be verbose)
-        # logger.debug(f"[Token] Node: {node}, Text: {text}")
+        # _get_logger().debug(f"[Token] Node: {node}, Text: {text}")
         pass
 
 
@@ -116,7 +169,7 @@ async def process_stream_event(
     )
     data = event_stream.get("data", {}) or {}
 
-    logger.debug(f"Processing event: {event_type} for node: {node}")
+    _get_logger().debug(f"Processing event: {event_type} for node: {node}")
 
     # Route to appropriate event handler
     if event_type == "on_chain_start":

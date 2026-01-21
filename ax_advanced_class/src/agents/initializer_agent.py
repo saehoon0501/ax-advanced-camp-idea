@@ -18,6 +18,7 @@ Uses @dynamic_prompt middleware for cache-optimized dynamic prompting:
 
 from typing import Annotated, Any, Optional, TypedDict
 import operator
+from enum import Enum
 
 from langchain.agents import create_agent
 from langchain_core.tools import BaseTool
@@ -31,6 +32,24 @@ from ax_advanced_class.src.tools import BashTool, FileOperationTool, TodoWriteTo
 # =============================================================================
 # Agent State Definition
 # =============================================================================
+class TodoStatus(str, Enum):
+    """Status of a todo item for task tracking."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
+class TodoItem(TypedDict):
+    """
+    A single todo item for task tracking.
+
+    Based on Claude Code's TodoWrite tool schema.
+    """
+
+    content: str  # Imperative form: "Create feature_list.json"
+    activeForm: str  # Present continuous: "Creating feature_list.json"
+    status: TodoStatus  # TodoStatus enum value
 
 
 class InitializerAgentState(TypedDict):
@@ -74,9 +93,7 @@ def create_initializer_agent(
     tools.extend(TodoWriteTool().get_langchain_tools())
 
     # Use default dynamic prompt middleware if none provided
-    agent_middleware = (
-        middleware if middleware is not None else [initializer_agent_dynamic_prompt]
-    )
+    agent_middleware = middleware if middleware is not None else [initializer_agent_dynamic_prompt]
 
     return create_agent(
         model=llm,
@@ -85,5 +102,3 @@ def create_initializer_agent(
         name="initializer_agent",
         state_schema=InitializerAgentState,
     )
-
-

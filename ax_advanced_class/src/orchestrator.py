@@ -295,9 +295,15 @@ Conversation history:
         """
         from ax_advanced_class.src.utils.stream_event_handler import (
             process_stream_event,
+            init_session_logger,
         )
 
         config = config or {"configurable": {"thread_id": "default"}}
+
+        # Initialize session logger with thread_id
+        session_id = config.get("configurable", {}).get("thread_id", "default")
+        init_session_logger(session_id)
+
         chain_stack = []
 
         # Determine input: either initial state or resume command

@@ -24,9 +24,12 @@ from ax_advanced_class.src.ui import (
     console,
     print_welcome,
     print_status,
-    run_streaming_session,
     print_prompt,
+    StreamingSession,
+    prompt_permission,
+    print_session_complete,
 )
+from ax_advanced_class.src.services import AgentStreamingService
 
 
 def create_llm(model_id: Optional[str] = None):
@@ -150,17 +153,32 @@ def main():
             config = {"configurable": {"thread_id": thread_id}}
             console.print(f"[dim]Thread ID: {thread_id}[/dim]")
 
-            # Run the async streaming session with user's message
-            asyncio.run(
-                run_streaming_session(
-                    orchestrator=orchestrator,
+            # Create service and run the streaming session
+            service = AgentStreamingService(orchestrator=orchestrator, config=config)
+
+            async def run_session():
+                session = StreamingSession()
+
+                # Initial stream
+                event_generator = service.astream(
+                    user_message=user_input,
                     project_name=project_name,
                     project_description=project_description,
                     repository_path=workspace,
-                    config=config,
-                    user_message=user_input,
                 )
-            )
+                final_event = await session.display_events(event_generator)
+
+                # Handle permission requests with resume loop
+                while final_event and final_event.type == "permission_required":
+                    is_approved = prompt_permission(final_event.content)
+                    resume_generator = service.aresume(is_approved)
+                    final_event = await session.display_events(resume_generator)
+
+                # Print final content and completion message
+                session.print_final_content()
+                print_session_complete()
+
+            asyncio.run(run_session())
             continue
 
         except KeyboardInterrupt:
