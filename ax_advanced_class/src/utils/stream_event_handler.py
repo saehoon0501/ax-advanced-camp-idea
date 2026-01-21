@@ -63,7 +63,7 @@ async def handle_streaming_token_event(
     node: str,
 ) -> None:
     """Handle streaming token events (on_chat_model_stream, on_llm_stream).
-    
+
     Args:
         data: The event data
         chain_stack: The chain stack state
@@ -73,15 +73,26 @@ async def handle_streaming_token_event(
     # Simplify chunk text extraction
     text = ""
     if hasattr(chunk, "content"):
-        text = chunk.content
+        content = chunk.content
+        # Handle list content (multimodal)
+        if isinstance(content, list):
+            text = "".join(
+                item.get("text", "") if isinstance(item, dict) else str(item)
+                for item in content
+            )
+        elif isinstance(content, str):
+            text = content
+        else:
+            text = str(content) if content else ""
     elif isinstance(chunk, dict):
         text = chunk.get("content", "")
+        if isinstance(text, list):
+            text = str(text)
     elif isinstance(chunk, str):
         text = chunk
-    
-    if text:
+
+    if text and isinstance(text, str):
         # Just log a summary or the token content (might be verbose)
-        # For this implementation, we'll just print/log it if it's not empty
         # logger.debug(f"[Token] Node: {node}, Text: {text}")
         pass
 

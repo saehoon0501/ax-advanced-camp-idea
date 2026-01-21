@@ -79,12 +79,14 @@ class RouterDecision(BaseModel):
 
 ROUTER_SYSTEM_PROMPT = """You are a routing agent that decides which specialized agent should handle the current task.
 
-Based on the user's message and project state, decide:
-- "initializer": Route here when the project needs initial setup (creating feature lists, progress tracking, project foundation)
-- "coding": Route here when features need to be implemented or code needs to be written
-- "finish": Route here when all tasks are complete or the user explicitly wants to end
+Based on the user's message and conversation history, decide:
+- "initializer": Route here ONLY on the first request when project needs initial setup
+- "coding": Route here ONLY on the first request when code needs to be written
+- "finish": Route here when an agent has already responded (messages from [Router], [Initializer], or [Coding] indicate work is done)
 
-Keep your reasoning brief. The specialized agents will handle all the complex work."""
+IMPORTANT: If you see messages starting with [Router], [Initializer], or [Coding] in the conversation, the task has been handled. Route to "finish".
+
+Keep your reasoning brief."""
 
 
 # =============================================================================
@@ -155,6 +157,14 @@ class LongRunningOrchestrator:
 
         return workflow.compile(checkpointer=self.checkpointer)
 
+    def _to_str(self, value: Any) -> str:
+        """Safely convert any value to string."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        return str(value)
+
     def _router_node(self, state: OrchestratorState) -> dict:
         """
         Simple router node that decides which agent should handle the task.
@@ -164,11 +174,21 @@ class LongRunningOrchestrator:
         """
         # Build context from state for the router
         messages = state.get("messages", [])
-        last_message = messages[-1].content if messages else state.get("project_description", "")
+        project_name = self._to_str(state.get("project_name", "Unknown"))
+        project_desc = self._to_str(state.get("project_description", "No description"))
 
-        router_input = f"""Project: {state.get("project_name", "Unknown")}
-                        Description: {state.get("project_description", "No description")}
-                        Current request: {last_message}"""
+        # Build conversation history for router to see
+        conversation_history = ""
+        for msg in messages:
+            content = self._to_str(msg.content)
+            role = "User" if msg.type == "human" else "Assistant"
+            conversation_history += f"{role}: {content}\n"
+
+        router_input = f"""Project: {project_name}
+Description: {project_desc}
+
+Conversation history:
+{conversation_history if conversation_history else "No messages yet."}"""
 
         # Use structured output for clear routing decision
         structured_llm = self.llm.with_structured_output(RouterDecision)
@@ -186,7 +206,13 @@ class LongRunningOrchestrator:
             "finish": AgentRoute.FINISH,
         }
 
-        return {"next_agent": route_map.get(decision.route, AgentRoute.FINISH)}
+        route = route_map.get(decision.route, AgentRoute.FINISH)
+
+        # Return routing decision with a message explaining the decision
+        return {
+            "next_agent": route,
+            "messages": [AIMessage(content=f"[Router] Routing to {decision.route}: {decision.reason}")],
+        }
 
     def _route_decision(self, state: OrchestratorState) -> AgentRoute:
         """Extract routing decision from state."""
@@ -196,53 +222,25 @@ class LongRunningOrchestrator:
         """
         Initializer agent node.
 
-        Simply invokes the initializer agent with project context.
-        The agent handles all complex initialization logic.
+        TODO: Will invoke the initializer agent with project context.
+        For now, returns a simple response to test the flow.
         """
-        input_message = HumanMessage(content="Initialize the project.")
-
-        agent_config = {
-            "recursion_limit": 100,
-            "context": {
-                "project_name": state.get("project_name", "Unnamed Project"),
-                "project_description": state.get("project_description", "No description"),
-                "repository_path": state.get("repository_path", "./workspace"),
-            },
+        # Simple response for testing the flow
+        return {
+            "messages": [AIMessage(content="[Initializer] Project initialization complete.")],
         }
-
-        result = self.initializer_agent.invoke({"messages": [input_message]}, config=agent_config)
-
-        output = result.get("output", "Initialization complete.")
-        if isinstance(output, list):
-            output = output[-1] if output else "Initialization complete."
-
-        return {"messages": [AIMessage(content=str(output))]}
 
     def _coding_node(self, state: OrchestratorState) -> dict:
         """
         Coding agent node.
 
-        Simply invokes the coding agent with project context.
-        The agent handles feature selection, implementation, and progress tracking.
+        TODO: Will invoke the coding agent with project context.
+        For now, returns a simple response to test the flow.
         """
-        input_message = HumanMessage(content="Start the coding session.")
-
-        agent_config = {
-            "recursion_limit": 100,
-            "context": {
-                "project_name": state.get("project_name", "Unnamed Project"),
-                "project_description": state.get("project_description", "No description"),
-                "repository_path": state.get("repository_path", "./workspace"),
-            },
+        # Simple response for testing the flow
+        return {
+            "messages": [AIMessage(content="[Coding] Coding session complete.")],
         }
-
-        result = self.coding_agent.invoke({"messages": [input_message]}, config=agent_config)
-
-        output = result.get("output", "Session complete.")
-        if isinstance(output, list):
-            output = output[-1] if output else "Session complete."
-
-        return {"messages": [AIMessage(content=str(output))]}
 
     def invoke(
         self,
@@ -281,6 +279,7 @@ class LongRunningOrchestrator:
         repository_path: str = "./workspace",
         config: Optional[dict] = None,
         resume_value: Optional[Any] = None,
+        user_message: Optional[str] = None,
     ):
         """
         Async stream events with the custom stream_event_handler.
@@ -292,6 +291,7 @@ class LongRunningOrchestrator:
             config: LangGraph config with thread_id for checkpointing
             resume_value: If provided, resume from interrupt with this value
                          (typically True/False for permission approval)
+            user_message: The user's input message to process
         """
         from ax_advanced_class.src.utils.stream_event_handler import (
             process_stream_event,
@@ -305,9 +305,14 @@ class LongRunningOrchestrator:
             # Resume from interrupt with the provided value
             stream_input = Command(resume=resume_value)
         else:
-            # Initial run with minimal state
+            # Build initial messages from user input
+            messages = []
+            if user_message:
+                messages.append(HumanMessage(content=user_message))
+
+            # Initial run with state including user message
             stream_input: OrchestratorState = {
-                "messages": [],
+                "messages": messages,
                 "project_name": project_name,
                 "project_description": project_description,
                 "repository_path": repository_path,

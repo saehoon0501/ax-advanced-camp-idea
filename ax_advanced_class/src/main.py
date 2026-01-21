@@ -60,14 +60,20 @@ def main():
     """Main CLI entry point - REPL loop."""
     # Default settings
     workspace = "./workspace"
+    project_name = "default-project"
+    project_description = "A default project"
 
     print_welcome(workspace)
-    model_id = None
 
-    # Project state
-    project_name = None
-    project_description = None
-    orchestrator = None
+    # Initialize orchestrator at startup
+    with console.status("[thinking]Setting up LLM and orchestrator...[/thinking]"):
+        llm = create_llm()
+        os.makedirs(workspace, exist_ok=True)
+        orchestrator = create_orchestrator(llm=llm)
+
+    console.print("[success]Ready![/success]")
+    console.print()
+
     config = {"configurable": {"thread_id": "cli-session"}}
     interrupt_count = 0
 
@@ -84,67 +90,67 @@ def main():
                 console.print("[dim]Goodbye![/dim]")
                 break
 
-            # Help command
-            if user_input.lower() in ("help", "/help", "?"):
-                print_welcome(workspace)
-                continue
+            # # Help command
+            # if user_input.lower() in ("help", "/help", "?"):
+            #     print_welcome(workspace)
+            #     continue
 
-            # Init command: /init <name> <description>
-            if user_input.startswith("/init"):
-                parts = user_input.split(maxsplit=2)
-                if len(parts) < 3:
-                    console.print("[error]Usage: /init <project_name> <description>[/error]")
-                    continue
+            # # Init command: /init <name> <description>
+            # if user_input.startswith("/init"):
+            #     parts = user_input.split(maxsplit=2)
+            #     if len(parts) < 3:
+            #         console.print("[error]Usage: /init <project_name> <description>[/error]")
+            #         continue
 
-                project_name = parts[1]
-                project_description = parts[2]
+            #     project_name = parts[1]
+            #     project_description = parts[2]
 
-                console.print()
-                console.print(f"[info]Initializing project:[/info] {project_name}")
-                console.print(f"[dim]{project_description}[/dim]")
+            #     console.print()
+            #     console.print(f"[info]Initializing project:[/info] {project_name}")
+            #     console.print(f"[dim]{project_description}[/dim]")
 
-                # Create LLM and tools
-                with console.status("[thinking]Setting up LLM and tools...[/thinking]"):
-                    llm = create_llm(model_id=model_id)
-                    tools = create_tools(
-                        workspace_path=workspace,
-                    )
-                    os.makedirs(workspace, exist_ok=True)
-                    orchestrator = create_orchestrator(llm=llm, tools=tools)
+            #     # Create LLM and tools
+            #     with console.status("[thinking]Setting up LLM and tools...[/thinking]"):
+            #         llm = create_llm(model_id=model_id)
+            #         tools = create_tools(
+            #             workspace_path=workspace,
+            #         )
+            #         os.makedirs(workspace, exist_ok=True)
+            #         orchestrator = create_orchestrator(llm=llm)
 
-                console.print(f"[success]Ready![/success] Loaded {len(tools)} tools")
-                console.print("[dim]Use /run to start the session[/dim]")
-                console.print()
-                continue
+            #     console.print(f"[success]Ready![/success] Loaded {len(tools)} tools")
+            #     console.print("[dim]Use /run to start the session[/dim]")
+            #     console.print()
+            #     continue
 
-            # Status command
-            if user_input.lower() in ("/status", "status"):
-                if orchestrator:
-                    print_status(orchestrator, config, workspace)
-                else:
-                    console.print("[dim]No project initialized. Use /init first.[/dim]")
-                continue
+            # # Status command
+            # if user_input.lower() in ("/status", "status"):
+            #     if orchestrator:
+            #         print_status(orchestrator, config, workspace)
+            #     else:
+            #         console.print("[dim]No project initialized. Use /init first.[/dim]")
+            #     continue
 
-            # Workspace command
-            if user_input.startswith("/workspace"):
-                parts = user_input.split(maxsplit=1)
-                if len(parts) < 2:
-                    console.print(f"[info]Current workspace:[/info] {os.path.abspath(workspace)}")
-                else:
-                    workspace = parts[1]
-                    console.print(f"[info]Workspace set to:[/info] {os.path.abspath(workspace)}")
-                continue
+            # # Workspace command
+            # if user_input.startswith("/workspace"):
+            #     parts = user_input.split(maxsplit=1)
+            #     if len(parts) < 2:
+            #         console.print(f"[info]Current workspace:[/info] {os.path.abspath(workspace)}")
+            #     else:
+            #         workspace = parts[1]
+            #         console.print(f"[info]Workspace set to:[/info] {os.path.abspath(workspace)}")
+            #     continue
 
-            # Run prompt(default)
+            # Run session
             console.print()
-            console.print(f"[info]Starting session for:[/info] {project_name}")
+            console.print(f"[info]Starting session...[/info]")
 
             # Generate unique thread_id for this session
             thread_id = f"session_{uuid.uuid4().hex[:8]}"
             config = {"configurable": {"thread_id": thread_id}}
             console.print(f"[dim]Thread ID: {thread_id}[/dim]")
 
-            # Run the async streaming session
+            # Run the async streaming session with user's message
             asyncio.run(
                 run_streaming_session(
                     orchestrator=orchestrator,
@@ -152,6 +158,7 @@ def main():
                     project_description=project_description,
                     repository_path=workspace,
                     config=config,
+                    user_message=user_input,
                 )
             )
             continue

@@ -146,7 +146,11 @@ def initializer_agent_dynamic_prompt(request: ModelRequest) -> str:
         Complete prompt string with static content first, dynamic content last
     """
     # Extract dynamic context from runtime (set via invoke config)
-    ctx = request.runtime.context
+    ctx = request.runtime.context if request.runtime else None
+
+    # Handle None context gracefully
+    if ctx is None:
+        ctx = {}
 
     project_name = ctx.get("project_name", "Unnamed Project")
     project_description = ctx.get("project_description", "No description provided")

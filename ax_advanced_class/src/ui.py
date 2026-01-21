@@ -20,6 +20,7 @@ from rich.box import ROUNDED
 from langgraph.types import Command
 
 from ax_advanced_class.src.orchestrator import LongRunningOrchestrator
+from ax_advanced_class.src.utils.stream_event_handler import process_stream_event
 
 
 VERSION = "0.1.0"
@@ -121,6 +122,7 @@ async def run_streaming_session(
     project_description: str,
     repository_path: str,
     config: Optional[dict] = None,
+    user_message: Optional[str] = None,
 ):
     """Run a streaming session and display events in Claude Code style.
 
@@ -136,6 +138,7 @@ async def run_streaming_session(
     current_tool = None
     streaming_content = ""
     resume_value = None  # None = initial run, True/False = resume with approval result
+    chain_stack = []  # For stream_event_handler
 
     while True:
         with Live(console=console, refresh_per_second=10, transient=True) as live:
@@ -150,7 +153,10 @@ async def run_streaming_session(
                 repository_path=repository_path,
                 config=config,
                 resume_value=resume_value,
+                user_message=user_message,
             ):
+                # Process event with stream_event_handler for logging
+                await process_stream_event(event, chain_stack)
                 event_type = event.get("event", "")
                 node = event.get("langgraph_node") or event.get("name") or ""
                 data = event.get("data", {}) or {}
@@ -189,13 +195,25 @@ async def run_streaming_session(
                     if chunk:
                         text = ""
                         if hasattr(chunk, "content"):
-                            text = chunk.content
+                            content = chunk.content
+                            # Handle list content (multimodal)
+                            if isinstance(content, list):
+                                text = "".join(
+                                    item.get("text", "") if isinstance(item, dict) else str(item)
+                                    for item in content
+                                )
+                            elif isinstance(content, str):
+                                text = content
+                            else:
+                                text = str(content) if content else ""
                         elif isinstance(chunk, dict):
                             text = chunk.get("content", "")
+                            if isinstance(text, list):
+                                text = str(text)
                         elif isinstance(chunk, str):
                             text = chunk
 
-                        if text:
+                        if text and isinstance(text, str):
                             streaming_content += text
                             live.update(Text(streaming_content[-500:], style="white"))
 
