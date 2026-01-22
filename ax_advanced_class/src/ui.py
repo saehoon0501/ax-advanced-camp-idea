@@ -8,6 +8,7 @@ Uses Rich library for styled terminal output.
 import os
 import sys
 import time
+import readline  # Enable arrow keys and history support for input()
 from typing import Optional
 
 from rich.console import Console, Group
@@ -122,8 +123,24 @@ def print_prompt():
 
     console.print(Control.move(0, -2))
 
-    prompt_text = "[prompt]❯[/prompt] "
-    user_input = console.input(prompt_text).strip()
+    # Use standard input with explicit readline support
+    # We construct the prompt manually with \001/\002 markers for readline to handle ANSI codes correctly
+    # \001 = Start of non-printing characters
+    # \002 = End of non-printing characters
+    # \x1b[1;91m = Bold Bright Red (matching 'prompt' style)
+    # \x1b[0m = Reset
+    prompt_str = "\001\x1b[1;91m\002❯\001\x1b[0m\002 "
+
+    while True:
+        try:
+            user_input = input(prompt_str).strip()
+        except EOFError:
+            return "exit"
+
+        if user_input:
+            break
+        # If input is empty, move cursor up to overwrite
+        console.print(Control.move(0, -1))
 
     console.print(Control.move(0, 1))
 
