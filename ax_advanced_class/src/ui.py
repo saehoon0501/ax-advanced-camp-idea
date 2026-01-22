@@ -6,6 +6,7 @@ Uses Rich library for styled terminal output.
 """
 
 import os
+import sys
 import time
 from typing import Optional
 
@@ -75,7 +76,9 @@ def print_welcome(workspace: str = "./workspace"):
       /     つ   [dim]이번 실습을 도와드릴 갓찌입니다~[/dim]
       """
 
-    left_content = "\n[bold]Welcome to Incubation Camp![/bold]\n" f"{mascot}\n\n" f"[dim]{os.path.abspath(workspace)}[/dim]"
+    left_content = (
+        "\n[bold]Welcome to Incubation Camp![/bold]\n" f"{mascot}\n\n" f"[dim]{os.path.abspath(workspace)}[/dim]"
+    )
 
     right_content = (
         "[bold]Commands[/bold]\n"
@@ -137,7 +140,9 @@ def print_status(orchestrator: LongRunningOrchestrator, config: dict, workspace:
 
     if state:
         console.print(f"  Project: [bold]{state.get('project_name', 'N/A')}[/bold]")
-        console.print(f"  Initialized: {'[green]Yes[/green]' if state.get('is_initialized') else '[yellow]No[/yellow]'}")
+        console.print(
+            f"  Initialized: {'[green]Yes[/green]' if state.get('is_initialized') else '[yellow]No[/yellow]'}"
+        )
         console.print(f"  Sessions: {state.get('session_count', 0)}")
 
         features = state.get("feature_list", [])
@@ -234,6 +239,7 @@ class StreamingSession:
         self.final_response = ""
         self.spinner_frames = ["◐", "◓", "◑", "◒"]
         self.spinner_idx = 0
+        self.header_printed = False
 
     def _get_spinner(self) -> str:
         """Get the next spinner frame."""
@@ -267,23 +273,17 @@ class StreamingSession:
         )
 
     def _create_view(self, user_input: str, status_renderable) -> Group:
-        """Create the full view with user input, content, and status."""
-        header = Text()
-        header.append("❯ ", style="prompt")
-        header.append(user_input)
-
+        """Create the full view with content and status."""
         # Show current segment instead of full streaming content
         display_text = self.current_segment
 
         body = Text(display_text, style="white")
 
-        # Layout: Content (Top) -> Status -> User Input (Bottom)
+        # Layout: Content (Top) -> Status (Bottom)
         return Group(
             body,
             Text(""),  # Padding below body
             status_renderable,
-            Text(""),  # Padding below status
-            header,  # User Input at bottom
         )
 
     def _flush_segment(self):
@@ -293,14 +293,21 @@ class StreamingSession:
             console.print()  # Add gap after text block
             self.current_segment = ""
 
-    async def display_events(self, event_generator: AsyncGenerator[StreamEvent, None], user_input: str) -> Optional[StreamEvent]:
+    async def display_events(
+        self, event_generator: AsyncGenerator[StreamEvent, None], user_input: str
+    ) -> Optional[StreamEvent]:
         """
         Display events from a generator until interrupted or complete.
         """
+        if not self.header_printed and user_input:
+            console.print(f"[prompt]❯[/prompt] {user_input}")
+            console.print()  # Add gap between prompt and response
+            self.header_printed = True
+
         current_status = self._create_status_line("Thinking...")
 
-        # Initial print of user input is handled by caller or persistent prompt
-        # We rely on Live view to show it at the bottom.
+        # Initial print of user input is handled above
+        # We rely on Live view to show content and status
 
         with Live(console=console, refresh_per_second=10, transient=True) as live:
             live.update(self._create_view(user_input, current_status))
@@ -392,10 +399,23 @@ class StreamingSession:
                             console.print(route_text)
                         else:
                             self._update_final_response(event.content)
+                            # Also treat as a segment to be displayed/flushed
+                            if self.final_response:
+                                # Only append if it's new content (avoid duplication if mixed with tokens)
+                                if self.final_response not in self.streaming_content:
+                                    self.streaming_content += self.final_response
+                                    self.current_segment += self.final_response
+                                    live.update(self._create_view(user_input, current_status))
 
                 elif event.type == "message":
                     if event.content:
                         self._update_final_response(event.content)
+                        # Also treat as a segment to be displayed/flushed
+                        if self.final_response:
+                            if self.final_response not in self.streaming_content:
+                                self.streaming_content += self.final_response
+                                self.current_segment += self.final_response
+                                live.update(self._create_view(user_input, current_status))
 
                 elif event.type == "permission_required":
                     self._flush_segment()
@@ -435,12 +455,15 @@ class StreamingSession:
         else:
             self.final_response = content
 
-    def print_final_content(self, user_input: str = None):
+    def print_final_content(self):
         """Print accumulated content (streaming tokens or final response) as markdown."""
-        # Since we flush segments incrementally, we only need to print the User Input header
-        # to restore the prompt context if needed, but we don't need to reprint the full content.
-        if user_input:
-            console.print(f"[prompt]❯[/prompt] {user_input}")
+        # User Input header was printed at start.
+
+        # If we have a final response but nothing was streamed (e.g. non-streaming router message),
+        # we need to print it now.
+        if self.final_response and not self.streaming_content:
+            console.print(Markdown(self.final_response))
+            console.print()
 
         # Flush any remaining segment just in case
         self._flush_segment()
@@ -455,8 +478,9 @@ def clear_last_prompt_lines(lines: int = 4):
     # Note: Rich's Control doesn't expose raw ANSI easily, so we use console.out directly
     # or rely on the fact that Control constructor takes codes.
 
-    # \x1b[J is "Erase in Display" (0 = cursor to end)
-    console.out("\x1b", end="")
+    # \x1b[0J is "Erase in Display" (0 = cursor to end)
+    sys.stdout.write("\x1b[0J")
+    sys.stdout.flush()
 
 
 def prompt_permission(message: str) -> bool:
@@ -491,6 +515,4 @@ def prompt_permission(message: str) -> bool:
 
 def print_session_complete():
     """Print session complete message."""
-    console.print()
-    console.print("[success]Session complete.[/success]")
     console.print()

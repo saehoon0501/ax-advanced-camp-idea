@@ -135,7 +135,6 @@ def main():
                     final_event = await session.display_events(resume_generator, user_input)
 
                 # Print final content and completion message
-                session.print_final_content(user_input)
                 print_session_complete()
 
                 # Capture final response for history
