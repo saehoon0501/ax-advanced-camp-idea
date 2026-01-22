@@ -73,7 +73,8 @@ class RouterDecision(BaseModel):
     )
     reason: str = Field(description="Brief explanation for the routing decision")
     response: Optional[str] = Field(
-        default=None, description="Direct response for general/non-coding questions (only when route='finish' for general questions)"
+        default=None,
+        description="Direct response for general/non-coding questions (only when route='finish' for general questions)",
     )
 
 
@@ -232,7 +233,7 @@ Conversation history:
         """
         Initializer agent node.
         """
-        result = self.initializer_agent.with_config(run_name="initializer").invoke({"messages": state.get("messages", [])})
+        result = self.initializer_agent.invoke({"messages": state.get("messages", [])})
 
         return {"messages": [AIMessage(content=str(result["messages"][-1].content))]}
 
@@ -241,7 +242,7 @@ Conversation history:
         Coding agent node.
         """
         # Simple response for testing the flow
-        result = self.coding_agent.with_config(run_name="coding").invoke({"messages": state.get("messages", [])})
+        result = self.coding_agent.invoke({"messages": state.get("messages", [])})
         return {"messages": [AIMessage(content=str(result["messages"][-1].content))]}
 
     def invoke(

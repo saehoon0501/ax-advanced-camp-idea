@@ -76,4 +76,5 @@ class AgentFactory:
         if spec.system_prompt == "":
             raise ValueError("System prompt is required")
 
-        return create_agent(**kwargs)
+        agent = create_agent(**kwargs)
+        return agent.with_config({"recursion_limit": 500})
