@@ -21,13 +21,10 @@ from langgraph.types import Command
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 import operator
 
-from ax_advanced_class.src.prompts import (
-    coding_agent_dynamic_prompt,
-    initializer_agent_dynamic_prompt,
-)
 from ax_advanced_class.src.agents import (
-    create_coding_agent,
-    create_initializer_agent,
+    AgentFactory,
+    coding_agent_spec,
+    initializer_agent_spec,
 )
 
 # =============================================================================
@@ -129,8 +126,9 @@ class LongRunningOrchestrator:
         self.llm = llm
         self.checkpointer = checkpointer or MemorySaver()
 
-        self.initializer_agent = create_initializer_agent(self.llm, [initializer_agent_dynamic_prompt])
-        self.coding_agent = create_coding_agent(self.llm, [coding_agent_dynamic_prompt])
+        factory = AgentFactory(self.llm)
+        self.initializer_agent = factory.create(initializer_agent_spec())
+        self.coding_agent = factory.create(coding_agent_spec())
 
         # Build the workflow graph
         self.workflow = self._build_workflow()
