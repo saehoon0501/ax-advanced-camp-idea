@@ -136,13 +136,8 @@ class AgentStreamingService:
                 if stream_event:
                     yield stream_event
 
-            # Check for interrupts after streaming completes
-            interrupt_event = self._check_for_interrupt()
-            if interrupt_event:
-                yield interrupt_event
-            else:
-                # Workflow completed
-                yield StreamEvent(type="complete", content="Session complete.")
+            # Workflow completed
+            yield StreamEvent(type="complete", content="Session complete.")
 
         except Exception as e:
             yield StreamEvent(
@@ -161,9 +156,18 @@ class AgentStreamingService:
         Returns:
             StreamEvent or None if the event should be filtered out
         """
+        # Handle interrupts directly when they appear in the event stream
+        if "__interrupt__" in raw_event:
+            return self._interrupt_event_from_value(raw_event["__interrupt__"])
+
         event_type = raw_event.get("event", "")
         node = raw_event.get("langgraph_node") or raw_event.get("name") or raw_event.get("node_name") or "unknown"
         data = raw_event.get("data", {}) or {}
+
+        if event_type == "on_chain_stream":
+            chunk = data.get("chunk")
+            if isinstance(chunk, dict) and "__interrupt__" in chunk:
+                return self._interrupt_event_from_value(chunk["__interrupt__"])
 
         # Route to appropriate transformation
         if event_type == "on_chain_start":
@@ -191,6 +195,10 @@ class AgentStreamingService:
     def _transform_chain_end(self, node: str, data: Dict[str, Any]) -> Optional[StreamEvent]:
         """Transform on_chain_end event."""
         output = data.get("output", {})
+
+        # Some LangGraph versions surface interrupts inside chain output
+        if isinstance(output, dict) and "__interrupt__" in output:
+            return self._interrupt_event_from_value(output["__interrupt__"])
 
         # Check for messages in output (agent responses)
         if isinstance(output, dict) and "messages" in output:
@@ -293,25 +301,40 @@ class AgentStreamingService:
             return obj
         return ""
 
-    def _check_for_interrupt(self) -> Optional[StreamEvent]:
-        """Check if there's a pending interrupt that needs user approval."""
-        state_snapshot = self.orchestrator.workflow.get_state(self.config)
+    def _interrupt_event_from_value(self, interrupt_value: Any) -> StreamEvent:
+        """Normalize interrupt payloads into a permission_required StreamEvent."""
+        # Interrupts can be tuples/lists of Interrupt objects
+        value = interrupt_value
+        if isinstance(value, (list, tuple)) and value:
+            value = value[0]
 
-        if state_snapshot and state_snapshot.tasks:
-            for task in state_snapshot.tasks:
-                if hasattr(task, "interrupts") and task.interrupts:
-                    for interrupt_data in task.interrupts:
-                        interrupt_value = interrupt_data.value if hasattr(interrupt_data, "value") else interrupt_data
+        if hasattr(value, "value"):
+            value = value.value
 
-                        if isinstance(interrupt_value, dict):
-                            question = interrupt_value.get("question", "Permission required")
-                        else:
-                            question = str(interrupt_value)
+        if isinstance(value, dict):
+            question = value.get("question", "Permission required")
+        else:
+            question = str(value)
 
-                        return StreamEvent(
-                            type="permission_required",
-                            content=question,
-                            metadata={"interrupt_data": interrupt_value},
-                        )
+        message = self._format_permission_message(question)
+        return StreamEvent(
+            type="permission_required",
+            content=message,
+            metadata={"interrupt_data": interrupt_value},
+        )
 
-        return None
+    def _format_permission_message(self, question: str) -> str:
+        """Make approval prompts concise and gentle."""
+        text = (question or "").strip()
+        if text.lower().startswith("approval needed:"):
+            return text
+
+        for prefix in ("permission denied:", "permission required:", "permission denied", "permission required"):
+            if text.lower().startswith(prefix):
+                text = text[len(prefix) :].strip()
+                break
+
+        if not text:
+            text = "This action needs your approval."
+
+        return f"Approval needed: {text}"

@@ -8,8 +8,8 @@ Available tools:
 - read: Read file contents (PREFER over cat/head/tail)
 - write: Create or overwrite files (PREFER over echo/cat redirects)
 - edit: Exact string replacement in files (PREFER over sed/awk)
-- glob: Find files by pattern (PREFER over find)
-- grep: Search file contents with regex (PREFER over grep/rg)
+- find: Find files by pattern (PREFER over bash glob)
+- search: Search file contents with regex (PREFER over bash grep/rg)
 
 These tools are purpose-built, safer, and provide better validation
 than their bash command equivalents.
@@ -34,7 +34,7 @@ class FileOperationTool:
     """
 
     # Tool names exposed by this class
-    _TOOL_NAMES = ("read", "write", "edit", "glob", "grep")
+    _TOOL_NAMES = ("read", "write", "edit", "find", "search")
 
     def __init__(self, config: Optional[PermissionConfig] = None):
         self.config = config or PermissionConfig()
@@ -148,9 +148,7 @@ class FileOperationTool:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def edit_file(
-        self, validated_path: str, old_string: str, new_string: str, replace_all: bool = False
-    ) -> dict:
+    def edit_file(self, validated_path: str, old_string: str, new_string: str, replace_all: bool = False) -> dict:
         """Replace exact string in file.
 
         Args:
@@ -273,7 +271,10 @@ class FileOperationTool:
             # Find ripgrep binary
             rg_path = self._find_ripgrep()
             if not rg_path:
-                return {"success": False, "error": "ripgrep (rg) not found. Please install it via: brew install ripgrep"}
+                return {
+                    "success": False,
+                    "error": "ripgrep (rg) not found. Please install it via: brew install ripgrep",
+                }
 
             cmd = [rg_path]
 
@@ -331,12 +332,12 @@ class FileOperationTool:
 
             # Apply head limit if specified
             if head_limit > 0 and output:
-                lines = output.split('\n')
-                output = '\n'.join(lines[:head_limit])
+                lines = output.split("\n")
+                output = "\n".join(lines[:head_limit])
 
             # Parse output based on mode
             if output:
-                matches = output.split('\n')
+                matches = output.split("\n")
             else:
                 matches = []
 
@@ -459,7 +460,7 @@ class FileOperationTool:
             return f"Error: {result['error']}"
 
         @tool
-        def glob(pattern: str = "**/*", path: Optional[str] = None) -> str:
+        def find(pattern: str = "**/*", path: Optional[str] = None) -> str:
             """
             Fast file pattern matching tool that works with any codebase size.
 
@@ -488,7 +489,7 @@ class FileOperationTool:
             return f"Error: {result['error']}"
 
         @tool
-        def grep(
+        def search(
             pattern: str,
             validated_path: Optional[str] = None,
             recursive: bool = True,
@@ -553,4 +554,4 @@ class FileOperationTool:
                 return result["raw_output"] if result["raw_output"] else "No matches found."
             return f"Error: {result['error']}"
 
-        return [read, write, edit, glob, grep]
+        return [read, write, edit, find, search]

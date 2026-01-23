@@ -175,12 +175,12 @@ class PermissionConfig:
                 "remote",
                 "stash",
                 # Standard workflow operations
-                "add",
-                "commit",
-                "checkout",
-                "fetch",
-                "pull",
-                "push",
+                # "add",
+                # "commit",
+                # "checkout",
+                # "fetch",
+                # "pull",
+                # "push",
                 # Config (global changes blocked via blocked_argument_patterns)
                 "config",
             }

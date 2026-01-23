@@ -12,8 +12,8 @@ from typing import Callable, List, Optional
 from langchain_core.messages import ToolMessage
 from langchain.agents.middleware import AgentMiddleware
 from langchain.tools.tool_node import ToolCallRequest
-from langgraph.types import interrupt
-from langgraph.types import Command
+from langgraph.errors import GraphInterrupt
+from langgraph.types import Command, interrupt
 
 from ax_advanced_class.src.config.tool_permission_config import (
     PermissionConfig,
@@ -208,7 +208,18 @@ class _BashValidator:
                     blocked_items=[blocked],
                 )
 
-        # . Path is outside workspace
+        # 2. Check allowed paths (workspace + allowed_paths) → ALLOW
+        allowed_roots = [self.config.workspace_root] + self.config.allowed_paths
+        for allowed in allowed_roots:
+            allowed_abs = os.path.abspath(os.path.expanduser(allowed))
+            if normalized == allowed_abs or normalized.startswith(allowed_abs + os.sep):
+                return CommandValidationResult(
+                    level=PermissionLevel.ALLOW,
+                    command=path,
+                    reason=f"Path is in allowed directory: {allowed}",
+                )
+
+        # 3. Path is outside workspace
         if is_write:
             # Write operations outside workspace → ASK
             return CommandValidationResult(
@@ -440,7 +451,9 @@ class _BashValidator:
             reason=f"Git subcommand '{subcommand}' requires confirmation",
         )
 
-    def _get_highest_priority_result(self, results: List[CommandValidationResult], original_command: str) -> CommandValidationResult:
+    def _get_highest_priority_result(
+        self, results: List[CommandValidationResult], original_command: str
+    ) -> CommandValidationResult:
         """
         Get the highest priority result from a list.
 
@@ -508,7 +521,9 @@ class ToolValidationMiddleware(AgentMiddleware):
 
                     # ASK level - proceed but could prompt user in future
                     if result.level == PermissionLevel.ASK:
-                        is_apporved = interrupt({"question": f"Permission denied: {result.reason}", "tool_call_id": tool_call_id})
+                        is_apporved = interrupt(
+                            {"question": f"Permission denied: {result.reason}", "tool_call_id": tool_call_id}
+                        )
                         if not is_apporved:
                             return ToolMessage(
                                 content=f"Error: Command denied. {result.reason}",
@@ -545,7 +560,9 @@ class ToolValidationMiddleware(AgentMiddleware):
 
                     # ASK for write operations to external paths
                     if result.level == PermissionLevel.ASK:
-                        is_apporved = interrupt({"question": f"Permission denied: {result.reason}", "tool_call_id": tool_call_id})
+                        is_apporved = interrupt(
+                            {"question": f"Permission denied: {result.reason}", "tool_call_id": tool_call_id}
+                        )
                         if not is_apporved:
                             return ToolMessage(
                                 content=f"Error: Path denied. {result.reason}",
@@ -617,6 +634,8 @@ class ToolValidationMiddleware(AgentMiddleware):
 
             return handler_result
 
+        except GraphInterrupt:
+            raise
         except Exception as e:
             return ToolMessage(
                 content=f"Error: Validation failed. {str(e)}",
@@ -627,7 +646,9 @@ class ToolValidationMiddleware(AgentMiddleware):
     def _truncate_output(self, result: ToolMessage | Command) -> ToolMessage | Command:
         """Truncate output if it exceeds MAX_OUTPUT_CHARS."""
         if isinstance(result, ToolMessage) and len(result.content) > MAX_OUTPUT_CHARS:
-            truncated_content = result.content[:MAX_OUTPUT_CHARS] + f"\n\n[Output truncated at {MAX_OUTPUT_CHARS} characters]"
+            truncated_content = (
+                result.content[:MAX_OUTPUT_CHARS] + f"\n\n[Output truncated at {MAX_OUTPUT_CHARS} characters]"
+            )
             return ToolMessage(
                 content=truncated_content,
                 tool_call_id=result.tool_call_id,
