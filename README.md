@@ -177,7 +177,7 @@ print(f'Progress: {completed}/{total} ({completed/total*100:.1f}%)')
 git log --oneline --graph -10
 
 # Latest progress notes
-head -n 30 claude-progress.txt
+head -n 30 progress.md
 ```
 
 ---

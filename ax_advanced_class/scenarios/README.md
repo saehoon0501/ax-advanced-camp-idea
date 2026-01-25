@@ -30,7 +30,7 @@ AI 에이전트가 복잡한 작업을 수행할 때, 컨텍스트 윈도우 제
 **역할**: 프로젝트 기반 구축
 
 - 200+ 기능 요구사항을 구조화된 JSON 파일로 생성
-- `claude-progress.txt` 진행 상황 추적 파일 생성
+- `progress.md` 진행 상황 추적 파일 생성
 - `init.sh` 개발 서버 시작 스크립트 작성
 - Git 저장소 초기화 및 첫 커밋
 - 기본 프로젝트 스캐폴딩
@@ -63,7 +63,7 @@ Do NOT try to implement all features at once.
 ```
 You are a Coding Agent. At the start of each session:
 1. Run `pwd` and read git logs to understand current state
-2. Read claude-progress.txt and feature_list.json
+2. Read progress.md and feature_list.json
 3. Choose ONE feature to work on
 4. Test it end-to-end before marking complete
 5. Commit your work with clear messages
@@ -99,7 +99,7 @@ NEVER declare project complete until all features pass.
 #### 2. Auto Summarizer
 
 **원칙**: 오래된 히스토리를 압축해 의미 보존  
-**적용**: `claude-progress.txt` 파일이 너무 길어질 때 요약  
+**적용**: `progress.md` 파일이 너무 길어질 때 요약  
 **학습 목표**: 정보 손실 최소화하며 압축
 
 #### 3. Tool Output Trimmer
@@ -127,7 +127,7 @@ NEVER declare project complete until all features pass.
 #### 6. State Recovery Agent
 
 **원칙**: 새 세션 시작 시 이전 컨텍스트 빠르게 복원  
-**적용**: `git log`, `claude-progress.txt`, `feature_list.json` 읽기  
+**적용**: `git log`, `progress.md`, `feature_list.json` 읽기  
 **학습 목표**: 제로 메모리에서 작업 컨텍스트 재구성  
 **파일**: `6.state_recovery.md` (revised)
 

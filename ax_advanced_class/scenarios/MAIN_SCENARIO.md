@@ -67,7 +67,7 @@ Agent: "NewChatButton 컴포넌트를 만들었고, 단위 테스트도 통과�
 **생성하는 것들**:
 
 1. **feature_list.json**: 200+ 기능의 구조화된 목록
-2. **claude-progress.txt**: 진행 상황 추적 파일
+2. **progress.md**: 진행 상황 추적 파일
 3. **init.sh**: 개발 서버 시작 스크립트
 4. **Git repository**: 초기 커밋
 5. **Project scaffolding**: 기본 프로젝트 구조
@@ -94,7 +94,7 @@ Given the user request: "{project_description}"
 
 3. Create init.sh that starts the development server
 4. Initialize git repository with clear first commit
-5. Create claude-progress.txt for tracking
+5. Create progress.md for tracking
 
 DO NOT implement features yourself. Your job is ONLY setup.
 ```
@@ -146,7 +146,7 @@ DO NOT implement features yourself. Your job is ONLY setup.
 
 1. `pwd` 실행 → 현재 디렉토리 확인
 2. `git log --oneline -10` → 최근 작업 파악
-3. `claude-progress.txt` 읽기 → 맥락 이해
+3. `progress.md` 읽기 → 맥락 이해
 4. `feature_list.json` 읽기 → 다음 작업 선택
 5. `init.sh` 실행 → 개발 서버 시작
 6. 기본 E2E 테스트 → 앱이 동작하는지 확인
@@ -158,7 +158,7 @@ DO NOT implement features yourself. Your job is ONLY setup.
 3. End-to-end 테스트로 검증
 4. `passes=true`로 업데이트
 5. Git 커밋 (형식화된 메시지)
-6. `claude-progress.txt` 업데이트
+6. `progress.md` 업데이트
 
 **세션 종료 루틴**:
 
@@ -175,7 +175,7 @@ You are a Coding Agent working incrementally on a long-running project.
 AT THE START OF EVERY SESSION:
 1. Run `pwd` to see your working directory
 2. Read git logs: `git log --oneline -10`
-3. Read claude-progress.txt to understand what happened
+3. Read progress.md to understand what happened
 4. Read feature_list.json to see all features
 5. Run init.sh to start the dev server
 6. Run basic E2E test to verify the app works
@@ -189,7 +189,7 @@ DURING THE SESSION:
 
 AT THE END OF EVERY SESSION:
 1. Commit your work with clear message
-2. Update claude-progress.txt
+2. Update progress.md
 3. Ensure the app is in a working state
 4. Leave clear notes for the next agent
 
@@ -207,7 +207,7 @@ CRITICAL RULES:
 ```
 project_root/
 ├── feature_list.json          # 모든 기능 목록 (Single Source of Truth)
-├── claude-progress.txt        # 세션별 진행 노트
+├── progress.md        # 세션별 진행 노트
 ├── init.sh                    # 개발 서버 시작 스크립트
 ├── .git/                      # Git repository
 │   └── (commit history)       # 각 커밋 = 하나의 완성된 기능
@@ -356,7 +356,7 @@ class InitializerAgent:
         self.create_init_script()
 
         # 5. Create progress file
-        Path("claude-progress.txt").write_text(
+        Path("progress.md").write_text(
             f"# {project_description}\n\nProject initialized.\n"
         )
 
@@ -457,7 +457,7 @@ python -c "import json; f=json.load(open('feature_list.json')); print(f'Progress
 git log --oneline --graph
 
 # Latest progress
-head -n 20 claude-progress.txt
+head -n 20 progress.md
 ```
 
 ## 📚 참고 자료
