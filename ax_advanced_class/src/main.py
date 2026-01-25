@@ -161,6 +161,14 @@ def main():
         except Exception as e:
             console.print(f"[error]Error: {e}[/error]")
             continue
+    # Best-effort cleanup to avoid noisy urllib3 shutdown errors.
+    try:
+        if hasattr(llm, "client") and llm.client:
+            llm.client.close()
+        if hasattr(llm, "bedrock_client") and llm.bedrock_client:
+            llm.bedrock_client.close()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
