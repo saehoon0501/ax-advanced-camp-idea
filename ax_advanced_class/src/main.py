@@ -108,6 +108,14 @@ def main():
     while True:
         try:
             user_input = print_prompt()
+            if user_input == "__interrupt__":
+                console.print()
+                interrupt_count += 1
+                if interrupt_count >= 2:
+                    console.print("[dim]Goodbye![/dim]")
+                    break
+                console.print("[warning]Press Ctrl+C again to exit.[/warning]")
+                continue
             interrupt_count = 0
 
             if not user_input:

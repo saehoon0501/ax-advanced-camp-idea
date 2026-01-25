@@ -137,6 +137,8 @@ def print_prompt():
             user_input = input(prompt_str).strip()
         except EOFError:
             return "exit"
+        except KeyboardInterrupt:
+            return "__interrupt__"
 
         if user_input:
             break
