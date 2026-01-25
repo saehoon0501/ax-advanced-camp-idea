@@ -522,7 +522,12 @@ class ToolValidationMiddleware(AgentMiddleware):
                     # ASK level - proceed but could prompt user in future
                     if result.level == PermissionLevel.ASK:
                         is_apporved = interrupt(
-                            {"question": f"Permission denied: {result.reason}", "tool_call_id": tool_call_id}
+                            {
+                                "question": f"Command '{args['command']}' requires confirmation",
+                                "tool_call_id": tool_call_id,
+                                "command": args["command"],
+                                "tool_name": tool_name,
+                            }
                         )
                         if not is_apporved:
                             return ToolMessage(
@@ -561,7 +566,12 @@ class ToolValidationMiddleware(AgentMiddleware):
                     # ASK for write operations to external paths
                     if result.level == PermissionLevel.ASK:
                         is_apporved = interrupt(
-                            {"question": f"Permission denied: {result.reason}", "tool_call_id": tool_call_id}
+                            {
+                                "question": f"Path '{normalized_path}' requires confirmation",
+                                "tool_call_id": tool_call_id,
+                                "path": normalized_path,
+                                "tool_name": tool_name,
+                            }
                         )
                         if not is_apporved:
                             return ToolMessage(

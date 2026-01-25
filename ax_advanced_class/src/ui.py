@@ -502,7 +502,44 @@ def clear_last_prompt_lines(lines: int = 4):
     sys.stdout.flush()
 
 
-def prompt_permission(message: str) -> bool:
+def _normalize_interrupt_context(context: object) -> dict:
+    """Extract a dict payload from interrupt context objects."""
+    value = context
+    if isinstance(value, (list, tuple)) and value:
+        value = value[0]
+    if hasattr(value, "value"):
+        value = value.value
+    return value if isinstance(value, dict) else {}
+
+
+def _format_permission_prompt(message: str, context: object | None) -> str:
+    """Format a permission message with optional tool context details."""
+    context_dict = _normalize_interrupt_context(context) if context else {}
+    if not context_dict:
+        return message
+
+    details = []
+    tool_name = context_dict.get("tool_name")
+    command = context_dict.get("command")
+    path = context_dict.get("path")
+    tool_call_id = context_dict.get("tool_call_id")
+
+    if tool_name:
+        details.append(f"[dim]Tool:[/dim] {tool_name}")
+    if command:
+        details.append(f"[dim]Command:[/dim] {command}")
+    if path:
+        details.append(f"[dim]Path:[/dim] {path}")
+    if tool_call_id:
+        details.append(f"[dim]Tool Call ID:[/dim] {tool_call_id}")
+
+    if not details:
+        return message
+
+    return f"{message}\n\n" + "\n".join(details)
+
+
+def prompt_permission(message: str, context: object | None = None) -> bool:
     """
     Display permission dialog and get user approval.
 
@@ -513,9 +550,10 @@ def prompt_permission(message: str) -> bool:
         True if user approved, False otherwise
     """
     console.print()
+    prompt_text = _format_permission_prompt(message, context)
     console.print(
         Panel(
-            f"[warning]{message}[/warning]",
+            f"[warning]{prompt_text}[/warning]",
             title="[bold yellow]Permission Required[/bold yellow]",
             border_style="yellow",
         )
