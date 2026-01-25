@@ -26,6 +26,7 @@ from ax_advanced_class.src.agents import (
     coding_agent_spec,
     initializer_agent_spec,
 )
+from ax_advanced_class.src.prompts.orchestrator_prompt import ORCHESTRATOR_SYSTEM_PROMPT
 
 # =============================================================================
 # State Definitions
@@ -42,11 +43,6 @@ class OrchestratorState(TypedDict, total=False):
 
     # Conversation messages (accumulates across turns)
     messages: Annotated[list[BaseMessage], operator.add]
-
-    # Project metadata
-    project_name: str
-    project_description: str
-    repository_path: str
 
     # Routing decision (set by router node)
     next_agent: Optional["AgentRoute"]
@@ -76,22 +72,6 @@ class RouterDecision(BaseModel):
         default=None,
         description="Direct response for general/non-coding questions (only when route='finish' for general questions)",
     )
-
-
-ROUTER_SYSTEM_PROMPT = """You are a routing agent that decides which specialized agent should handle the current task.
-
-Based on the user's message and conversation history, decide:
-- "initializer": Route here ONLY on the first request when project needs initial setup
-- "coding": Route here ONLY on the first request when code needs to be written
-- "finish": Route here when:
-  1. An agent has already responded (messages from [Router], [Initializer], or [Coding] indicate work is done)
-  2. The user asks a general question NOT related to software engineering or coding (e.g., greetings like "hello", "how are you?", or general knowledge questions like "what's the tallest building?")
-
-For general questions (case 2), provide a friendly direct response in the "response" field.
-
-IMPORTANT: If you see messages starting with [Router], [Initializer], or [Coding] in the conversation, the task has been handled. Route to "finish".
-
-Keep your reasoning brief."""
 
 
 # =============================================================================
@@ -180,28 +160,13 @@ class LongRunningOrchestrator:
         """
         # Build context from state for the router
         messages = state.get("messages", [])
-        project_name = self._to_str(state.get("project_name", "Unknown"))
-        project_desc = self._to_str(state.get("project_description", "No description"))
-
-        # Build conversation history for router to see
-        conversation_history = ""
-        for msg in messages:
-            content = self._to_str(msg.content)
-            role = "User" if msg.type == "human" else "Assistant"
-            conversation_history += f"{role}: {content}\n"
-
-        router_input = f"""Project: {project_name}
-Description: {project_desc}
-
-Conversation history:
-{conversation_history if conversation_history else "No messages yet."}"""
 
         # Use structured output for clear routing decision
         structured_llm = self.llm.with_structured_output(RouterDecision)
         decision: RouterDecision = structured_llm.invoke(
             [
-                {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
-                {"role": "user", "content": router_input},
+                {"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT},
+                *messages,
             ]
         )
 
@@ -247,28 +212,23 @@ Conversation history:
 
     def invoke(
         self,
-        project_name: str,
-        project_description: str,
-        repository_path: str = "./workspace",
+        messages: Optional[list[BaseMessage]] = None,
         config: Optional[dict] = None,
     ) -> OrchestratorState:
         """
         Start or resume a long-running project.
 
         Args:
-            project_name: Name of the project
-            project_description: Full description of what to build
-            repository_path: Path to the git repository
+            messages: Optional initial messages to seed the workflow
             config: Optional LangGraph config (for thread_id, etc.)
 
         Returns:
             Final orchestrator state
         """
+        if messages is None:
+            messages = []
         initial_state: OrchestratorState = {
-            "messages": [],
-            "project_name": project_name,
-            "project_description": project_description,
-            "repository_path": repository_path,
+            "messages": messages,
         }
 
         config = config or {"configurable": {"thread_id": "default"}}
@@ -277,9 +237,6 @@ Conversation history:
 
     async def astream_events(
         self,
-        project_name: str,
-        project_description: str,
-        repository_path: str = "./workspace",
         config: Optional[dict] = None,
         resume_value: Optional[Any] = None,
         user_message: Optional[str] = None,
@@ -289,9 +246,6 @@ Conversation history:
         Async stream events with the custom stream_event_handler.
 
         Args:
-            project_name: Name of the project
-            project_description: Description of the project
-            repository_path: Path to the repository
             config: LangGraph config with thread_id for checkpointing
             resume_value: If provided, resume from interrupt with this value
                          (typically True/False for permission approval)
@@ -334,9 +288,6 @@ Conversation history:
             # Initial run with state including messages
             stream_input: OrchestratorState = {
                 "messages": messages,
-                "project_name": project_name,
-                "project_description": project_description,
-                "repository_path": repository_path,
             }
 
         # Use astream_events from the compiled workflow

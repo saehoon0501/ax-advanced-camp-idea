@@ -53,17 +53,11 @@ class AgentStreamingService:
         self.orchestrator = orchestrator
         self.config = config or {"configurable": {"thread_id": "default"}}
         self._pending_interrupt = None
-        # Store params for resume
-        self._last_project_name: Optional[str] = None
-        self._last_project_description: Optional[str] = None
-        self._last_repository_path: Optional[str] = None
+        self._last_message_history: Optional[list] = None
 
     async def astream(
         self,
         user_message: str,
-        project_name: str,
-        project_description: str,
-        repository_path: str,
         message_history: Optional[list] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
@@ -71,25 +65,15 @@ class AgentStreamingService:
 
         Args:
             user_message: The user's input message
-            project_name: Name of the project
-            project_description: Description of the project
-            repository_path: Path to the repository
             message_history: Optional conversation history (list of {role, content} dicts)
 
         Yields:
             StreamEvent objects for the UI to display
         """
-        # Store for potential resume
-        self._last_project_name = project_name
-        self._last_project_description = project_description
-        self._last_repository_path = repository_path
         self._last_message_history = message_history
 
         async for event in self._arun_stream(
             user_message=user_message,
-            project_name=project_name,
-            project_description=project_description,
-            repository_path=repository_path,
             message_history=message_history,
         ):
             yield event
@@ -110,23 +94,13 @@ class AgentStreamingService:
     async def _arun_stream(
         self,
         user_message: Optional[str] = None,
-        project_name: Optional[str] = None,
-        project_description: Optional[str] = None,
-        repository_path: Optional[str] = None,
         resume_value: Optional[bool] = None,
         message_history: Optional[list] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Internal method that handles streaming and interrupt detection."""
-        # Use stored values for resume
-        project_name = project_name or self._last_project_name or "default-project"
-        project_description = project_description or self._last_project_description or "A default project"
-        repository_path = repository_path or self._last_repository_path or "./workspace"
         message_history = message_history or getattr(self, "_last_message_history", None)
 
         raw_stream = self.orchestrator.astream_events(
-            project_name=project_name,
-            project_description=project_description,
-            repository_path=repository_path,
             config=self.config,
             resume_value=resume_value,
             user_message=user_message,

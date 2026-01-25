@@ -159,7 +159,6 @@ def print_status(orchestrator: LongRunningOrchestrator, config: dict, workspace:
     console.print(f"  Workspace: [dim]{os.path.abspath(workspace)}[/dim]")
 
     if state:
-        console.print(f"  Project: [bold]{state.get('project_name', 'N/A')}[/bold]")
         console.print(
             f"  Initialized: {'[green]Yes[/green]' if state.get('is_initialized') else '[yellow]No[/yellow]'}"
         )

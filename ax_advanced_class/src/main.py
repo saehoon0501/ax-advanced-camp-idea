@@ -115,8 +115,6 @@ def main():
     load_dotenv()
     # Default settings
     workspace = "./workspace"
-    project_name = "default-project"
-    project_description = "A default project"
 
     print_welcome(workspace)
 
@@ -181,9 +179,6 @@ def main():
                 # Stream with the persistent service, passing conversation history
                 event_generator = service.astream(
                     user_message=user_input,
-                    project_name=project_name,
-                    project_description=project_description,
-                    repository_path=workspace,
                     message_history=conversation_history,
                 )
                 final_event = await session.display_events(event_generator, user_input)
