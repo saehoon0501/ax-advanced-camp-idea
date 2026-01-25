@@ -39,9 +39,7 @@ def init_session_logger(session_id: str) -> logging.Logger:
     # File handler - logs everything to file
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    )
+    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     logger.addHandler(file_handler)
 
     # Prevent propagation to root logger (no console output)
@@ -89,53 +87,9 @@ def _safe_serialize(obj: Any, max_length: int = 500) -> str:
         return result
 
 
-def _log_raw_event(event_stream: Dict[str, Any]) -> None:
-    """Log raw event with all fields for debugging.
-
-    Based on LangChain BaseStreamEvent schema:
-    - event: Event type (on_chain_start, on_tool_end, etc.)
-    - name: Name of the runnable
-    - run_id: Unique UUID for the run
-    - tags: List of tags
-    - metadata: Contains langgraph_node, langgraph_step, etc.
-    - data: Payload (input/chunk/output depending on lifecycle)
-    """
-    # Skip noisy streaming events
-    event_type = event_stream.get("event", "")
-    if event_type in ("on_chat_model_stream", "on_llm_stream", "on_chain_stream"):
-        return
-
-    logger = _get_logger()
-    name = event_stream.get("name", "")
-    run_id = event_stream.get("run_id", "")
-    tags = event_stream.get("tags", [])
-    metadata = event_stream.get("metadata", {})
-    data = event_stream.get("data", {})
-
-    # Extract LangGraph-specific metadata
-    langgraph_node = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
-    langgraph_step = metadata.get("langgraph_step", "") if isinstance(metadata, dict) else ""
-
-    # Log structured summary
-    logger.info(
-        f"[RAW EVENT] "
-        f"event={event_type} | "
-        f"name={name} | "
-        f"node={langgraph_node} | "
-        f"step={langgraph_step} | "
-        f"run_id={str(run_id)[:8]}..."
-    )
-
-    # Log data payload separately (no truncation)
-    if data:
-        data_full = _safe_serialize(data, max_length=0)
-        logger.info(f"[RAW EVENT DATA] {data_full}")
-
-async def handle_chain_start_event(
-    node: str, chain_stack: List[Dict[str, Any]]
-) -> None:
+async def handle_chain_start_event(node: str, chain_stack: List[Dict[str, Any]]) -> None:
     """Handle chain start events.
-    
+
     Args:
         node: The node name
         chain_stack: Mutable list tracking the chain stack state
@@ -151,7 +105,7 @@ async def handle_tool_start_event(
     event_stream: Dict[str, Any],
 ) -> None:
     """Handle tool start events.
-    
+
     Args:
         node: The node name
         data: The event data
@@ -169,7 +123,7 @@ async def handle_chain_end_event(
     chain_stack: List[Dict[str, Any]],
 ) -> None:
     """Handle chain end events.
-    
+
     Args:
         node: The node name
         data: The event data
@@ -178,7 +132,7 @@ async def handle_chain_end_event(
     if chain_stack:
         # Ideally we should pop the matching node, but for simple logging we just pop
         chain_stack.pop()
-    
+
     output = data.get("output")
     _get_logger().info(f"[Chain End] Node: {node}, Output: {output}")
 
@@ -202,10 +156,7 @@ async def handle_streaming_token_event(
         content = chunk.content
         # Handle list content (multimodal)
         if isinstance(content, list):
-            text = "".join(
-                item.get("text", "") if isinstance(item, dict) else str(item)
-                for item in content
-            )
+            text = "".join(item.get("text", "") if isinstance(item, dict) else str(item) for item in content)
         elif isinstance(content, str):
             text = content
         else:
@@ -246,18 +197,11 @@ async def process_stream_event(
         event_stream: The raw event stream from LangGraph
         chain_stack: Mutable list tracking the chain stack state
     """
-    # Log raw event first for debugging
-    _log_raw_event(event_stream)
-
     event_type = event_stream.get("event") or ""
     metadata = event_stream.get("metadata", {}) or {}
 
     # Prefer langgraph_node from metadata (more reliable)
-    node = (
-        metadata.get("langgraph_node")
-        or event_stream.get("name")
-        or "unknown"
-    )
+    node = metadata.get("langgraph_node") or event_stream.get("name") or "unknown"
     data = event_stream.get("data", {}) or {}
 
     # Route to appropriate event handler
@@ -275,4 +219,3 @@ async def process_stream_event(
 
     elif event_type in ("on_chat_model_stream", "on_llm_stream"):
         await handle_streaming_token_event(data, chain_stack, node)
-
