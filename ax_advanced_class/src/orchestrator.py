@@ -157,9 +157,9 @@ class LongRunningOrchestrator:
             },
         )
 
-        # After agents complete, route back to router for next decision
-        workflow.add_edge("initializer", "router")
-        workflow.add_edge("coding", "router")
+        # After agents complete, end the workflow
+        workflow.add_edge("initializer", END)
+        workflow.add_edge("coding", END)
 
         return workflow.compile(checkpointer=self.checkpointer)
 
@@ -235,7 +235,7 @@ Conversation history:
         """
         result = self.initializer_agent.invoke({"messages": state.get("messages", [])})
 
-        return {"messages": [AIMessage(content=str(result["messages"][-1].content))]}
+        return {"messages": [AIMessage(content=result["messages"][-1].content)]}
 
     def _coding_node(self, state: OrchestratorState) -> dict:
         """
@@ -243,7 +243,7 @@ Conversation history:
         """
         # Simple response for testing the flow
         result = self.coding_agent.invoke({"messages": state.get("messages", [])})
-        return {"messages": [AIMessage(content=str(result["messages"][-1].content))]}
+        return {"messages": [AIMessage(content=result["messages"][-1].content)]}
 
     def invoke(
         self,
