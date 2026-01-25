@@ -189,21 +189,14 @@ class AgentStreamingService:
         if isinstance(output, dict) and "__interrupt__" in output:
             return self._interrupt_event_from_value(output["__interrupt__"])
 
-        # Check for messages in output (agent responses)
-        if isinstance(output, dict) and "messages" in output:
-            messages = output["messages"]
-            if messages:
-                last_msg = messages[-1] if isinstance(messages, list) else messages
-                content = self._extract_content(last_msg)
-
-                # Check if it's a router transition
-                if node == "router" and "[Router]" in content:
-                    return StreamEvent(
-                        type="agent_transition",
-                        content=content,
-                        node=node,
-                        metadata={"next_agent": output.get("next_agent")},
-                    )
+        # Check for router transition based on structured output
+        if node == "router" and isinstance(output, dict) and "next_agent" in output:
+            return StreamEvent(
+                type="agent_transition",
+                content="",
+                node=node,
+                metadata={"next_agent": output.get("next_agent")},
+            )
 
         return None
 
