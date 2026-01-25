@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import readline  # Enable arrow keys and history support for input()
+from contextlib import nullcontext
 from typing import Optional
 
 from rich.console import Console, Group
@@ -254,6 +255,8 @@ class StreamingSession:
         self.current_tool_input = {}
         self.tool_start_time = None
         self.final_response = ""
+        self.processed_run_ids = set()
+        self.active_run_id = ""
         self.spinner_frames = ["◐", "◓", "◑", "◒"]
         self.spinner_idx = 0
         self.header_printed = False
@@ -289,12 +292,13 @@ class StreamingSession:
             style="dim",
         )
 
-    def _create_view(self, user_input: str, status_renderable) -> Group:
+    def _create_view(self, user_input: str, status_renderable, show_status: bool = True) -> Group:
         """Create the full view with content and status."""
         # Show current segment instead of full streaming content
-        display_text = self.current_segment
+        body = Markdown(self.current_segment, style="white")
 
-        body = Text(display_text, style="white")
+        if not show_status:
+            return Group(body)
 
         # Layout: Content (Top) -> Status (Bottom)
         return Group(
@@ -321,137 +325,174 @@ class StreamingSession:
             console.print()  # Add gap between prompt and response
             self.header_printed = True
 
-        current_status = self._create_status_line("Thinking...")
+        use_status = console.is_terminal and sys.stdout.isatty()
+        show_live_status = not use_status
+        current_status = self._create_status_line("Thinking...") if show_live_status else Text("")
+        status_context = (
+            console.status("[thinking]Thinking...[/thinking]", spinner="dots") if use_status else nullcontext()
+        )
 
         # Initial print of user input is handled above
         # We rely on Live view to show content and status
 
-        with Live(console=console, refresh_per_second=10, transient=True) as live:
-            live.update(self._create_view(user_input, current_status))
+        with status_context as status:
+            with Live(console=console) as live:
+                live.update(self._create_view(user_input, current_status, show_status=show_live_status))
 
-            async for event in event_generator:
-                if event.type == "thinking":
-                    current_status = self._create_status_line("Thinking...")
-                    live.update(self._create_view(user_input, current_status))
+                try:
+                    async for event in event_generator:
+                        if event.type == "thinking":
+                            if show_live_status:
+                                current_status = self._create_status_line("Thinking...")
+                                live.update(self._create_view(user_input, current_status, show_status=show_live_status))
+                            if status:
+                                status.update("[thinking]Thinking...[/thinking]")
 
-                elif event.type == "token":
-                    self.streaming_content += event.content
-                    self.current_segment += event.content
-                    live.update(self._create_view(user_input, current_status))
+                        elif event.type == "token":
+                            run_id = event.metadata.get("run_id", "") if event.metadata else ""
+                            self.active_run_id = run_id
 
-                elif event.type == "tool_call":
-                    # Flush text before tool
-                    self._flush_segment()
-                    # Clear Live view body (handled by _create_view reading empty current_segment)
+                            self.processed_run_ids.add(run_id)
+                            self.streaming_content += event.content
+                            self.current_segment += event.content
+                            live.update(self._create_view(user_input, current_status, show_status=show_live_status))
 
-                    self.current_tool = event.metadata.get("tool_name", "unknown")
-                    self.current_tool_input = event.metadata.get("tool_input", {})
-                    self.tool_start_time = time.time()
+                        elif event.type == "tool_call":
+                            # Flush text before tool
+                            self._flush_segment()
+                            # Clear Live view body (handled by _create_view reading empty current_segment)
 
-                    # Show tool execution with preview
-                    icon = _get_tool_icon(self.current_tool)
-                    input_preview = _format_tool_input(self.current_tool, self.current_tool_input)
+                            self.current_tool = event.metadata.get("tool_name", "unknown")
+                            self.current_tool_input = event.metadata.get("tool_input", {})
+                            self.tool_start_time = time.time()
 
-                    status = Text()
-                    status.append(f"{self._get_spinner()} ", style="spinner")
-                    status.append(f"{icon} ", style="tool")
-                    status.append(self.current_tool, style="tool.name")
-                    status.append(f"  {input_preview}", style="tool.input")
+                            # Show tool execution with preview
+                            icon = _get_tool_icon(self.current_tool)
+                            input_preview = _format_tool_input(self.current_tool, self.current_tool_input)
 
-                    current_status = status
-                    live.update(self._create_view(user_input, current_status))
+                            status_line = Text()
+                            status_line.append(f"{self._get_spinner()} ", style="spinner")
+                            status_line.append(f"{icon} ", style="tool")
+                            status_line.append(self.current_tool, style="tool.name")
+                            status_line.append(f"  {input_preview}", style="tool.input")
 
-                elif event.type == "tool_result":
-                    if self.current_tool:
-                        duration = time.time() - self.tool_start_time if self.tool_start_time else 0
-                        icon = _get_tool_icon(self.current_tool)
+                            current_status = status_line
+                            if show_live_status:
+                                live.update(self._create_view(user_input, current_status, show_status=show_live_status))
+                            if status:
+                                status.update(f"[tool]{icon} {self.current_tool}[/tool] {input_preview}")
 
-                        # Print completed tool with result
-                        result_line = Text()
-                        result_line.append(f"{ICONS['tool_done']} ", style="success")
-                        result_line.append(f"{icon} ", style="tool")
-                        result_line.append(self.current_tool, style="tool.name")
+                        elif event.type == "tool_result":
+                            if self.current_tool:
+                                duration = time.time() - self.tool_start_time if self.tool_start_time else 0
+                                icon = _get_tool_icon(self.current_tool)
 
-                        input_preview = _format_tool_input(self.current_tool, self.current_tool_input)
-                        result_line.append(f"  {input_preview}", style="tool.input")
-                        result_line.append(f"  ({_format_duration(duration)})", style="tool.time")
+                                # Print completed tool with result
+                                result_line = Text()
+                                result_line.append(f"{ICONS['tool_done']} ", style="success")
+                                result_line.append(f"{icon} ", style="tool")
+                                result_line.append(self.current_tool, style="tool.name")
 
-                        # Show output if meaningful
-                        if event.content and event.content.strip():
-                            output = _format_tool_output(event.content)
-                            if output:
-                                result_line.append(f"\n  {output}", style="tool.output")
+                                input_preview = _format_tool_input(self.current_tool, self.current_tool_input)
+                                result_line.append(f"  {input_preview}", style="tool.input")
+                                result_line.append(f"  ({_format_duration(duration)})", style="tool.time")
 
-                        console.print(result_line)
-                        console.print()  # Add gap after tool execution
+                                # Show output if meaningful
+                                if event.content and event.content.strip():
+                                    output = _format_tool_output(event.content)
+                                    if output:
+                                        result_line.append(f"\n  {output}", style="tool.output")
 
-                    self.current_tool = None
-                    self.current_tool_input = {}
-                    self.tool_start_time = None
+                                console.print(result_line)
+                                console.print()  # Add gap after tool execution
 
-                    current_status = self._create_status_line("Thinking...")
-                    live.update(self._create_view(user_input, current_status))
+                            self.current_tool = None
+                            self.current_tool_input = {}
+                            self.tool_start_time = None
 
-                elif event.type == "agent_transition":
-                    if event.content:
-                        # Flush before transition message
-                        self._flush_segment()
+                            if show_live_status:
+                                current_status = self._create_status_line("Thinking...")
+                                live.update(self._create_view(user_input, current_status, show_status=show_live_status))
+                            if status:
+                                status.update("[thinking]Thinking...[/thinking]")
 
-                        # Parse routing decision
-                        if "[Router] Routing to" in event.content:
-                            # Extract agent name and reason
-                            parts = event.content.replace("[Router] Routing to ", "").split(": ", 1)
-                            agent = parts[0] if parts else "unknown"
-                            reason = parts[1] if len(parts) > 1 else ""
+                        elif event.type == "agent_transition":
+                            if event.content:
+                                # Flush before transition message
+                                self._flush_segment()
 
-                            route_text = Text()
-                            route_text.append(f"{ICONS['route']} ", style="route")
-                            route_text.append(agent, style="bold cyan")
-                            if reason:
-                                (
-                                    route_text.append(f"  {reason[:60]}...", style="dim")
-                                    if len(reason) > 60
-                                    else route_text.append(f"  {reason}", style="dim")
-                                )
-                            console.print(route_text)
-                        else:
-                            self._update_final_response(event.content)
-                            # Also treat as a segment to be displayed/flushed
-                            if self.final_response:
-                                # Only append if it's new content (avoid duplication if mixed with tokens)
-                                if self.final_response not in self.streaming_content:
-                                    self.streaming_content += self.final_response
-                                    self.current_segment += self.final_response
-                                    live.update(self._create_view(user_input, current_status))
+                                # Parse routing decision
+                                if "[Router] Routing to" in event.content:
+                                    # Extract agent name and reason
+                                    parts = event.content.replace("[Router] Routing to ", "").split(": ", 1)
+                                    agent = parts[0] if parts else "unknown"
+                                    reason = parts[1] if len(parts) > 1 else ""
 
-                elif event.type == "message":
-                    if event.content:
-                        self._update_final_response(event.content)
-                        # Also treat as a segment to be displayed/flushed
-                        if self.final_response:
-                            if self.final_response not in self.streaming_content:
-                                self.streaming_content += self.final_response
-                                self.current_segment += self.final_response
-                                live.update(self._create_view(user_input, current_status))
+                                    route_text = Text()
+                                    route_text.append(f"{ICONS['route']} ", style="route")
+                                    route_text.append(agent, style="bold cyan")
+                                    if reason:
+                                        (
+                                            route_text.append(f"  {reason[:60]}...", style="dim")
+                                            if len(reason) > 60
+                                            else route_text.append(f"  {reason}", style="dim")
+                                        )
+                                    console.print(route_text)
+                                    if status:
+                                        status.update(f"[route]Routing to {agent}[/route]")
+                                else:  # direct response from router
+                                    self._update_final_response(event.content)
+                                    # Also treat as a segment to be displayed/flushed
+                                    if self.final_response:
+                                        # Only append if it's new content (avoid duplication if mixed with tokens)
+                                        if self.final_response not in self.streaming_content:
+                                            self.streaming_content += self.final_response
+                                            self.current_segment += self.final_response
+                                            live.update(
+                                                self._create_view(
+                                                    user_input, current_status, show_status=show_live_status
+                                                )
+                                            )
 
-                elif event.type == "permission_required":
-                    self._flush_segment()
-                    return event
+                        elif event.type == "message":
+                            if event.node == "":
+                                self._update_final_response(event.content)
+                            run_id = event.metadata.get("run_id", "") if event.metadata else ""
+                            if run_id:
+                                self.active_run_id = run_id
 
-                elif event.type == "complete":
-                    self._flush_segment()
-                    return event
+                            if event.content:
+                                if run_id in self.processed_run_ids:
+                                    # if event.content.startswith(self.current_segment):
+                                    self.current_segment += event.content[len(self.current_segment) :]
+                                    live.update(
+                                        self._create_view(user_input, current_status, show_status=show_live_status)
+                                    )
 
-                elif event.type == "error":
-                    self._flush_segment()
-                    error_text = Text()
-                    error_text.append(f"{ICONS['tool_error']} ", style="error")
-                    error_text.append(f"Error: {event.content}", style="error")
-                    console.print(error_text)
-                    return event
+                        elif event.type == "permission_required":
+                            self._flush_segment()
+                            return event
 
-            # End of generator
-            self._flush_segment()
+                        elif event.type == "complete":
+                            # self._flush_segment()
+                            return event
+
+                        elif event.type == "error":
+                            self._flush_segment()
+                            error_text = Text()
+                            error_text.append(f"{ICONS['tool_error']} ", style="error")
+                            error_text.append(f"Error: {event.content}", style="error")
+                            console.print(error_text)
+                            return event
+                finally:
+                    if hasattr(event_generator, "aclose"):
+                        try:
+                            await event_generator.aclose()
+                        except Exception:
+                            pass
+
+                # End of generator
+                self.current_segment = ""
 
         return None
 
@@ -471,19 +512,6 @@ class StreamingSession:
             self.final_response = content[9:]
         else:
             self.final_response = content
-
-    def print_final_content(self):
-        """Print accumulated content (streaming tokens or final response) as markdown."""
-        # User Input header was printed at start.
-
-        # If we have a final response but nothing was streamed (e.g. non-streaming router message),
-        # we need to print it now.
-        if self.final_response and not self.streaming_content:
-            console.print(Markdown(self.final_response))
-            console.print()
-
-        # Flush any remaining segment just in case
-        self._flush_segment()
 
 
 def clear_last_prompt_lines(lines: int = 4):
