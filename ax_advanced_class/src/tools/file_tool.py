@@ -460,7 +460,7 @@ class FileOperationTool:
             return f"Error: {result['error']}"
 
         @tool
-        def find(pattern: str = "**/*", path: Optional[str] = None) -> str:
+        def glob(pattern: str = "**/*", path: Optional[str] = None) -> str:
             """
             Fast file pattern matching tool that works with any codebase size.
 
@@ -489,7 +489,7 @@ class FileOperationTool:
             return f"Error: {result['error']}"
 
         @tool
-        def search(
+        def grep(
             pattern: str,
             validated_path: Optional[str] = None,
             recursive: bool = True,
@@ -554,4 +554,4 @@ class FileOperationTool:
                 return result["raw_output"] if result["raw_output"] else "No matches found."
             return f"Error: {result['error']}"
 
-        return [read, write, edit, find, search]
+        return [read, write, edit, glob, grep]
