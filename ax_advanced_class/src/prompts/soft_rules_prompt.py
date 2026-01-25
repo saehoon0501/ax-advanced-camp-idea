@@ -303,19 +303,11 @@ You do not need to use '&' at the end of the command when using this parameter.
 """
 
 # =============================================================================
-# SECTION 6: AGENTIC BEHAVIOR - TASK TOOL & SUB-AGENTS
+# SECTION 6: AGENTIC BEHAVIOR - TASK TOOL
 # =============================================================================
 
 TASK_TOOL_RULES = """
-## Task Tool for Sub-Agents
-
-Launch a new agent to handle complex, multi-step tasks autonomously.
-
-### Available agent types:
-- Bash: Command execution specialist for running bash commands
-- general-purpose: General-purpose agent for researching complex questions
-- Explore: Fast agent specialized for exploring codebases
-- Plan: Software architect agent for designing implementation plans
+## Task Tool
 
 ### When NOT to use the Task tool:
 - If you want to read a specific file path, use the Read or Glob tool
@@ -324,17 +316,9 @@ Launch a new agent to handle complex, multi-step tasks autonomously.
 - If you are searching for code within a specific file or set of 2-3 files,
   use the Read tool instead
 
-### Usage Guidelines:
-- Always include a short description (3-5 words) summarizing what the agent will do
-- Launch multiple agents concurrently whenever possible, to maximize performance
-- When the agent is done, it will return a single message back to you
-- The result returned by the agent is not visible to the user - summarize it
-- Agents can be resumed using the `resume` parameter by passing the agent ID
-
 VERY IMPORTANT: When exploring the codebase to gather context or to answer
 a question that is not a needle query for a specific file/class/function,
-it is CRITICAL that you use the Task tool with subagent_type=Explore instead
-of running search commands directly.
+it is CRITICAL that you use the Task tool running search commands directly.
 """
 
 # =============================================================================
@@ -354,11 +338,31 @@ and demonstrate thoroughness to the user.
 - in_progress: Currently working on (limit to ONE task at a time)
 - completed: Task finished successfully
 
-IMPORTANT: Task descriptions must have two forms:
+IMPORTANT: Task descriptions must have these fields:
+- id: Unique identifier for the task (required for merge)
 - content: The imperative form describing what needs to be done
   (e.g., "Run tests", "Build the project")
 - activeForm: The present continuous form shown during execution
   (e.g., "Running tests", "Building the project")
+- status: One of "pending", "in_progress", "completed"
+
+### Merge vs Replace
+
+TodoWrite supports two modes via the `merge` parameter:
+
+**merge=False (Replace):**
+- Replaces the entire todo list with the provided todos
+- Use when creating the initial todo list
+- Use when completely restructuring tasks
+- Example: `todo_write([...], merge=False)`
+
+**merge=True (Update):**
+- Updates existing todos by matching 'id' field
+- Adds new todos if ID doesn't exist
+- Keeps existing todos that aren't in the update
+- Use for marking tasks complete or updating status
+- Use for adding one or two new tasks
+- Example: `todo_write([{"id": "1", "status": "completed", ...}], merge=True)`
 
 ### Task Management Rules
 
@@ -366,7 +370,7 @@ IMPORTANT: Task descriptions must have two forms:
 - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
 - Exactly ONE task must be in_progress at any time (not less, not more)
 - Complete current tasks before starting new ones
-- Remove tasks that are no longer relevant from the list entirely
+- Use merge=True to update individual tasks efficiently
 
 ### Task Completion Requirements
 

@@ -46,36 +46,53 @@ class TodoWriteTool:
         """
 
         @tool
-        def todo_write(todos: list[dict]) -> Command:
+        def todo_write(todos: list[dict], merge: bool = False) -> Command:
             """
             Update your todo list to track task progress.
 
-            Send the COMPLETE updated list of todos each time you call this tool.
-            The entire list will be replaced with your new list.
+            Args:
+                todos: List of todo items to update or create. Each item must have:
+                    - id (str): Unique identifier for the todo
+                    - content (str): Imperative form (e.g., "Run tests")
+                    - activeForm (str): Present continuous (e.g., "Running tests")
+                    - status (str): "pending", "in_progress", or "completed"
+                merge: If True, updates existing todos by matching 'id' field and
+                       keeps other todos unchanged. If False, replaces entire list.
+
+            MERGE BEHAVIOR:
+
+            When merge=True:
+            - Each todo must have an 'id' field
+            - Todos with matching IDs are updated
+            - Todos without matching IDs are added
+            - Existing todos not in the list remain unchanged
+            - Use this when updating status of specific tasks
+
+            When merge=False:
+            - Entire list is replaced with provided todos
+            - Use this when creating initial todo list
 
             RULES:
             - Only ONE task should be in_progress at a time
             - Mark tasks complete IMMEDIATELY after finishing
-            - Always include content, activeForm, and status for each todo
-            - Use this tool BEFORE starting work on a new task
+            - Use merge=true to update individual tasks
+            - Use merge=false to replace entire list
 
             TASK STATES:
             - pending: Task not yet started
             - in_progress: Currently working on (only ONE at a time)
             - completed: Task finished successfully
 
-            Args:
-                todos: Complete updated list of todo items. Each item must have:
-                    - content (str): Imperative form (e.g., "Run tests")
-                    - activeForm (str): Present continuous (e.g., "Running tests")
-                    - status (str): "pending", "in_progress", or "completed"
-
-            Example:
+            Example (initial creation with merge=False):
                 todo_write([
-                    {"content": "Read progress file", "activeForm": "Reading progress file", "status": "completed"},
-                    {"content": "Implement feature", "activeForm": "Implementing feature", "status": "in_progress"},
-                    {"content": "Run tests", "activeForm": "Running tests", "status": "pending"}
-                ])
+                    {"id": "1", "content": "Read progress file", "activeForm": "Reading progress file", "status": "pending"},
+                    {"id": "2", "content": "Implement feature", "activeForm": "Implementing feature", "status": "pending"}
+                ], merge=False)
+
+            Example (update single task with merge=True):
+                todo_write([
+                    {"id": "1", "content": "Read progress file", "activeForm": "Reading progress file", "status": "completed"}
+                ], merge=True)
 
             Returns:
                 Command to update the agent's todo_list state
@@ -86,6 +103,7 @@ class TodoWriteTool:
                 if not isinstance(t, dict):
                     continue
 
+                todo_id = t.get("id", "")
                 content = t.get("content", "")
                 active_form = t.get("activeForm", "")
                 status = t.get("status", "pending")
@@ -94,13 +112,17 @@ class TodoWriteTool:
                 if status not in ("pending", "in_progress", "completed"):
                     status = "pending"
 
-                validated_todos.append({
-                    "content": content,
-                    "activeForm": active_form,
-                    "status": status,
-                })
+                validated_todos.append(
+                    {
+                        "id": todo_id,
+                        "content": content,
+                        "activeForm": active_form,
+                        "status": status,
+                    }
+                )
 
             # Return Command to update agent's state
-            return Command(update={"todo_list": validated_todos})
+            # Wrap todos with merge flag for the custom reducer
+            return Command(update={"todo_list": {"todos": validated_todos, "merge": merge}})
 
         return [todo_write]
