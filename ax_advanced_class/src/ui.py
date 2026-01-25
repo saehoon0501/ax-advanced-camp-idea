@@ -255,7 +255,6 @@ class StreamingSession:
         self.current_tool = None
         self.current_tool_input = {}
         self.tool_start_time = None
-        self.final_response = ""
         self.processed_run_ids = set()
         self.active_run_id = ""
         self.spinner_frames = ["◐", "◓", "◑", "◒"]
@@ -442,29 +441,21 @@ class StreamingSession:
                                     if status:
                                         status.update(f"[route]Routing to {agent}[/route]")
                                 else:  # direct response from router
-                                    self._update_final_response(event.content)
-                                    # Also treat as a segment to be displayed/flushed
-                                    if self.final_response:
-                                        # Only append if it's new content (avoid duplication if mixed with tokens)
-                                        if self.final_response not in self.streaming_content:
-                                            self.streaming_content += self.final_response
-                                            self.current_segment += self.final_response
-                                            live.update(
-                                                self._create_view(
-                                                    user_input, current_status, show_status=show_live_status
-                                                )
-                                            )
+                                    # Only append if it's new content (avoid duplication if mixed with tokens)
+                                    if event.content not in self.streaming_content:
+                                        self.streaming_content += event.content
+                                        self.current_segment += event.content
+                                        live.update(
+                                            self._create_view(user_input, current_status, show_status=show_live_status)
+                                        )
 
                         elif event.type == "message":
-                            if event.node == "":
-                                self._update_final_response(event.content)
                             run_id = event.metadata.get("run_id", "") if event.metadata else ""
                             if run_id:
                                 self.active_run_id = run_id
 
                             if event.content:
                                 if run_id in self.processed_run_ids:
-                                    # if event.content.startswith(self.current_segment):
                                     self.current_segment += event.content[len(self.current_segment) :]
                                     live.update(
                                         self._create_view(user_input, current_status, show_status=show_live_status)
@@ -475,7 +466,6 @@ class StreamingSession:
                             return event
 
                         elif event.type == "complete":
-                            # self._flush_segment()
                             return event
 
                         elif event.type == "error":
@@ -496,23 +486,6 @@ class StreamingSession:
                 self.current_segment = ""
 
         return None
-
-    def _update_final_response(self, content: str) -> None:
-        """Update final response, stripping agent prefixes and ignoring routing messages."""
-        if not content:
-            return
-        # Skip intermediate routing messages
-        if content.startswith("[Router] Routing to"):
-            return
-        # Strip agent prefixes
-        if content.startswith("[Router] "):
-            self.final_response = content[9:]
-        elif content.startswith("[Initializer] "):
-            self.final_response = content[14:]
-        elif content.startswith("[Coding] "):
-            self.final_response = content[9:]
-        else:
-            self.final_response = content
 
 
 def clear_last_prompt_lines(lines: int = 4):

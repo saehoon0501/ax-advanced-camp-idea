@@ -71,11 +71,7 @@ def load_dotenv() -> None:
                     key, value = line.split("=", 1)
                     key = key.strip()
                     value = value.strip()
-                    if (
-                        len(value) >= 2
-                        and value[0] == value[-1]
-                        and value[0] in ("'", "\"")
-                    ):
+                    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
                         value = value[1:-1]
                     if key and key not in os.environ:
                         os.environ[key] = value
@@ -170,9 +166,6 @@ def main():
             # Run session
             console.print()
 
-            # Use a mutable container to capture session result
-            session_result = {"final_response": ""}
-
             async def run_session():
                 session = StreamingSession()
 
@@ -192,16 +185,7 @@ def main():
                 # Print final content and completion message
                 print_session_complete()
 
-                # Capture final response for history
-                session_result["final_response"] = session.final_response
-
             asyncio.run(run_session())
-
-            # Append to conversation history
-            if session_result["final_response"]:
-                conversation_history.append({"role": "user", "content": user_input})
-                conversation_history.append({"role": "assistant", "content": session_result["final_response"]})
-
             continue
 
         except KeyboardInterrupt:
