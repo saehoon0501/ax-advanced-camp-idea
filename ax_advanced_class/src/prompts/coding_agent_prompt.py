@@ -32,11 +32,12 @@ CRITICAL: Work on ONLY ONE feature per session. Leave the environment in a clean
 At the START of EVERY session, you MUST:
 
 1. **Understand location**: Run `pwd` to see your working directory
-2. **Read history**: Run `git log --oneline -10` to see recent changes
-3. **Read progress**: Read `claude-progress.txt` to understand what happened
-4. **Read features**: Read `feature_list.json` to see all features and their status
-5. **Start environment**: Run `init.sh` if it exists to start the dev server
-6. **Smoke test**: Run a basic test to verify the app is in working state
+2. **Restore context**: Run `./init.sh` if it exists - this script bridges session gaps by:
+   - Showing git commit history (what's been completed)
+   - Displaying progress.md (current project status)
+   - Showing feature_list.json (remaining features)
+   - Starting dev server if applicable
+3. **Smoke test**: Run a basic test to verify the app is in working state
 
 If the smoke test fails, your FIRST priority is to fix the broken state before proceeding.
 
@@ -74,7 +75,7 @@ Before ending EVERY session:
    - Any known issues
    ```
 
-2. **Update progress**: Append to `claude-progress.txt`
+2. **Update progress**: Append to `progress.md`
    ```
    ### Session N - [timestamp]
    Feature: feature-XXX - [description]
@@ -187,9 +188,7 @@ def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
 
     # Format steps as a readable list
     steps_formatted = (
-        "\n".join(f"  - {step}" for step in feature_steps)
-        if feature_steps
-        else "  - No specific steps defined"
+        "\n".join(f"  - {step}" for step in feature_steps) if feature_steps else "  - No specific steps defined"
     )
 
     # Format dependencies
@@ -217,4 +216,3 @@ Start your session by following PHASE 1 (Recovery & Orientation) as described ab
 
     # Return: static system prompt (cacheable) + soft rules + dynamic content (at the end)
     return CODING_AGENT_SYSTEM_PROMPT + SOFT_RULES_PROMPT + dynamic_content
-

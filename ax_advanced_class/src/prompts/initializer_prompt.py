@@ -52,7 +52,7 @@ Create `feature_list.json` with this structure:
 
 ### 2. Progress Tracking Setup
 
-Create `claude-progress.txt` with initial content:
+Create `progress.md` with initial content:
 ```
 # Project Progress Log
 Project: [project_name]
@@ -67,20 +67,28 @@ Status: Initialized
 - Next: Start implementing high-priority features
 ```
 
-### 3. Git Repository Initialization
+### 3. Init Script - Session Continuity Bridge
 
-- Initialize git if not already done
-- Create clear initial commit with message: "feat: initialize project with feature list and progress tracking"
-- Set up `.gitignore` appropriate for the project type
-
-### 4. Init Script (if applicable)
-
-Create `init.sh` if the project requires a dev server:
+Create `init.sh` to bridge the gap between separate coding sessions:
 ```bash
 #!/bin/bash
-# Start the development server
-# [project-specific commands]
+# Session Continuity Script
+# Purpose: Restore project context for new sessions
+
+# Check git commit history to see what's been completed
+git log --oneline -20
+
+# Display current progress
+cat progress.md
+
+# Show feature list
+cat feature_list.json
 ```
+
+This script helps the Coding Agent understand:
+- What work has been committed (via git history)
+- Current project status (via progress.md)
+- Remaining features to implement (via feature_list.json)
 
 ## Feature Categories
 
@@ -168,12 +176,10 @@ def initializer_agent_dynamic_prompt(request: ModelRequest) -> str:
 Please perform the following setup tasks:
 1. Break down the project into 50-200 specific, testable features
 2. Create the feature_list.json file with proper structure
-3. Initialize the git repository (if needed)
-4. Create the claude-progress.txt file for session tracking
-5. Create init.sh script for dev server (if applicable)
+3. Create the progress.md file for session tracking
+4. Create init.sh script for session continuity (and dev server if applicable)
 
 Remember: Your job is ONLY setup - do not implement features!"""
 
     # Return: static system prompt (cacheable) + soft rules + dynamic content (at the end)
     return INITIALIZER_SYSTEM_PROMPT + SOFT_RULES_PROMPT + dynamic_content
-
