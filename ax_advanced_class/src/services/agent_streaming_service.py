@@ -8,6 +8,7 @@ Handles raw LangGraph events and transforms them into semantic StreamEvent objec
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, Literal, Optional
+from collections.abc import Iterable
 
 from ax_advanced_class.src.orchestrator import LongRunningOrchestrator
 
@@ -122,16 +123,17 @@ class AgentStreamingService:
         repository_path = repository_path or self._last_repository_path or "./workspace"
         message_history = message_history or getattr(self, "_last_message_history", None)
 
+        raw_stream = self.orchestrator.astream_events(
+            project_name=project_name,
+            project_description=project_description,
+            repository_path=repository_path,
+            config=self.config,
+            resume_value=resume_value,
+            user_message=user_message,
+            message_history=message_history,
+        )
         try:
-            async for raw_event in self.orchestrator.astream_events(
-                project_name=project_name,
-                project_description=project_description,
-                repository_path=repository_path,
-                config=self.config,
-                resume_value=resume_value,
-                user_message=user_message,
-                message_history=message_history,
-            ):
+            async for raw_event in raw_stream:
                 stream_event = self._transform_event(raw_event)
                 if stream_event:
                     yield stream_event
@@ -145,6 +147,12 @@ class AgentStreamingService:
                 content=str(e),
                 metadata={"exception_type": type(e).__name__},
             )
+        finally:
+            if hasattr(raw_stream, "aclose"):
+                try:
+                    await raw_stream.aclose()
+                except Exception:
+                    pass
 
     def _transform_event(self, raw_event: Dict[str, Any]) -> Optional[StreamEvent]:
         """
@@ -161,7 +169,9 @@ class AgentStreamingService:
             return self._interrupt_event_from_value(raw_event["__interrupt__"])
 
         event_type = raw_event.get("event", "")
-        node = raw_event.get("langgraph_node") or raw_event.get("name") or raw_event.get("node_name") or "unknown"
+        metadata = raw_event.get("metadata", {})
+        node = (metadata.get("langgraph_node") if isinstance(metadata, dict) else "") or ""
+        run_id = str(raw_event.get("run_id") or "")
         data = raw_event.get("data", {}) or {}
 
         if event_type == "on_chain_stream":
@@ -170,19 +180,24 @@ class AgentStreamingService:
                 return self._interrupt_event_from_value(chunk["__interrupt__"])
 
         # Route to appropriate transformation
+        stream_event: Optional[StreamEvent] = None
         if event_type == "on_chain_start":
-            return self._transform_chain_start(node, data)
+            stream_event = self._transform_chain_start(node, data)
         elif event_type == "on_chain_end":
-            return self._transform_chain_end(node, data)
+            stream_event = self._transform_chain_end(node, data)
         elif event_type == "on_tool_start":
-            return self._transform_tool_start(node, data, raw_event)
+            stream_event = self._transform_tool_start(node, data, raw_event)
         elif event_type == "on_tool_end":
-            return self._transform_tool_end(node, data)
+            stream_event = self._transform_tool_end(node, data)
         elif event_type in ("on_chat_model_stream", "on_llm_stream"):
-            return self._transform_token(node, data)
+            stream_event = self._transform_token(node, data, raw_event)
+        elif event_type in ("on_chat_model_end", "on_llm_end"):
+            stream_event = self._transform_model_end(node, data, raw_event)
 
         # Filter out other event types
-        return None
+        if stream_event:
+            stream_event.metadata.setdefault("run_id", run_id)
+        return stream_event
 
     def _transform_chain_start(self, node: str, data: Dict[str, Any]) -> StreamEvent:
         """Transform on_chain_start event."""
@@ -216,13 +231,26 @@ class AgentStreamingService:
                         metadata={"next_agent": output.get("next_agent")},
                     )
 
-                return StreamEvent(
-                    type="message",
-                    content=content,
-                    node=node,
-                )
-
         return None
+
+    def _transform_model_end(self, node: str, data: Dict[str, Any], raw_event: Dict[str, Any]) -> Optional[StreamEvent]:
+        """Transform on_chat_model_end/on_llm_end event."""
+        output = data.get("output")
+        if not output:
+            return None
+
+        content = self._extract_content(output)
+        if not content:
+            return None
+
+        return StreamEvent(
+            type="message",
+            content=content,
+            node=node,
+            metadata={
+                "run_id": raw_event.get("run_id", ""),
+            },
+        )
 
     def _transform_tool_start(self, node: str, data: Dict[str, Any], raw_event: Dict[str, Any]) -> StreamEvent:
         """Transform on_tool_start event."""
@@ -265,7 +293,7 @@ class AgentStreamingService:
             },
         )
 
-    def _transform_token(self, node: str, data: Dict[str, Any]) -> Optional[StreamEvent]:
+    def _transform_token(self, node: str, data: Dict[str, Any], raw_event: Dict[str, Any]) -> Optional[StreamEvent]:
         """Transform streaming token event."""
         chunk = data.get("chunk")
         if not chunk:
@@ -279,26 +307,47 @@ class AgentStreamingService:
             type="token",
             content=text,
             node=node,
+            metadata={
+                "run_id": raw_event.get("run_id", ""),
+            },
         )
 
     def _extract_content(self, obj: Any) -> str:
         """Extract text content from various object types."""
+
+        def _join_blocks(blocks: Iterable) -> str:
+            parts = []
+            for item in blocks:
+                if isinstance(item, dict):
+                    parts.append(str(item.get("text", "") or ""))
+                elif hasattr(item, "text"):
+                    text = getattr(item, "text")
+                    parts.append(str(text) if text else "")
+                else:
+                    parts.append(str(item))
+            return "".join(parts)
+
+        def _is_block_sequence(value: Any) -> bool:
+            return isinstance(value, Iterable) and not isinstance(value, (str, bytes, dict))
+
         if hasattr(obj, "content"):
             content = obj.content
-            if isinstance(content, list):
-                # Handle multimodal content
-                return "".join(item.get("text", "") if isinstance(item, dict) else str(item) for item in content)
-            elif isinstance(content, str):
+            if isinstance(content, str):
                 return content
-            else:
-                return str(content) if content else ""
+            if _is_block_sequence(content):
+                return _join_blocks(content)
+            return str(content) if content else ""
         elif isinstance(obj, dict):
             content = obj.get("content", "")
-            if isinstance(content, list):
-                return str(content)
-            return content
+            if isinstance(content, str):
+                return content
+            if _is_block_sequence(content):
+                return _join_blocks(content)
+            return str(content) if content else ""
         elif isinstance(obj, str):
             return obj
+        if _is_block_sequence(obj):
+            return _join_blocks(obj)
         return ""
 
     def _interrupt_event_from_value(self, interrupt_value: Any) -> StreamEvent:
