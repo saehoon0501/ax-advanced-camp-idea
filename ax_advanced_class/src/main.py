@@ -9,9 +9,23 @@ architecture (Initializer + Coding Agent).
 """
 
 import os
+import sys
 import asyncio
 import uuid
 from typing import Optional
+
+# Suppress noisy urllib3 exception in Python 3.13
+original_unraisablehook = sys.unraisablehook
+
+
+def _handle_unraisable(unraisable):
+    # Suppress ValueError: I/O operation on closed file from urllib3/http.client
+    if unraisable.exc_type is ValueError and str(unraisable.exc_value) == "I/O operation on closed file":
+        return
+    original_unraisablehook(unraisable)
+
+
+sys.unraisablehook = _handle_unraisable
 
 from ax_advanced_class.src.orchestrator import create_orchestrator
 from ax_advanced_class.src.llm.bedrock_client import BedrockClient, LLMConfig
