@@ -422,9 +422,9 @@ class StreamingSession:
                                 self._flush_segment()
 
                                 # Parse routing decision
-                                if "[Router] Routing to" in event.content:
+                                if "Routing to" in event.content:
                                     # Extract agent name and reason
-                                    parts = event.content.replace("[Router] Routing to ", "").split(": ", 1)
+                                    parts = event.content.replace("Routing to ", "").split(": ", 1)
                                     agent = parts[0] if parts else "unknown"
                                     reason = parts[1] if len(parts) > 1 else ""
 

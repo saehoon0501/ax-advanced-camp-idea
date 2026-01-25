@@ -181,9 +181,9 @@ class LongRunningOrchestrator:
 
         # Build message content - include response for general questions
         if decision.response:
-            message_content = f"[Router] {decision.response}"
+            message_content = decision.response
         else:
-            message_content = f"[Router] Routing to {decision.route}: {decision.reason}"
+            message_content = f"Routing to {decision.route}: {decision.reason}"
 
         return {
             "next_agent": route,
