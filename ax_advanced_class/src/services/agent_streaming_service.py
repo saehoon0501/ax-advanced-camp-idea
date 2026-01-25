@@ -193,7 +193,7 @@ class AgentStreamingService:
         if node == "router" and isinstance(output, dict) and "next_agent" in output:
             return StreamEvent(
                 type="agent_transition",
-                content="",
+                content=self._extract_content(output["messages"][-1].content),
                 node=node,
                 metadata={"next_agent": output.get("next_agent")},
             )
