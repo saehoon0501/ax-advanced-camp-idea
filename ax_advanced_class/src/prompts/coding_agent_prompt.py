@@ -98,7 +98,7 @@ Before ending EVERY session:
 4. **Never leave broken state** - Always commit working code
 5. **Always update progress** - Future agents depend on your notes
 6. **Always commit** - Git-based checkpointing allows recovery from bad changes
-7. **Use todo_list proactively** - Create todos when receiving a goal, mark in_progress before starting, mark completed immediately after finishing
+7. **Use todo_list proactively** - Create todos when receiving a goal. CRITICAL: Call todo_write(merge=True) EVERY time status changes - mark in_progress BEFORE starting work, mark completed IMMEDIATELY after finishing. Never batch status updates.
 
 ## Handling Problems
 

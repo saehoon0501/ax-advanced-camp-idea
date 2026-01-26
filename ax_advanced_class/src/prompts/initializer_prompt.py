@@ -110,7 +110,7 @@ This script helps the Coding Agent understand:
 3. **Prioritize correctly** - Core functionality = high, nice-to-have = low
 4. **Consider dependencies** - List dependencies so Coding Agent knows the order
 5. **Think like a QA** - Each feature should be testable by a real user
-6. **Use todo_list proactively** - Create todos when receiving a goal, mark in_progress before starting, mark completed immediately after finishing
+6. **Use todo_list proactively** - Create todos when receiving a goal. CRITICAL: Call todo_write(merge=True) EVERY time status changes - mark in_progress BEFORE starting work, mark completed IMMEDIATELY after finishing. Never batch status updates.
 
 ## Output Summary
 

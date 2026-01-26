@@ -233,8 +233,8 @@ def _format_tool_input(tool_name: str, tool_input: dict) -> str:
 
     if "bash" in tool_lower:
         cmd = tool_input.get("command", "")
-        if len(cmd) > 80:
-            cmd = cmd[:77] + "..."
+        if len(cmd) > 60:
+            cmd = cmd[:57] + "..."
         return f"$ {cmd}"
     elif "read" in tool_lower:
         path = tool_input.get("validated_path", tool_input.get("path", ""))
@@ -579,9 +579,11 @@ def _format_permission_prompt(message: str, context: object | None) -> str:
     if tool_name:
         details.append(f"[dim]Tool:[/dim] {tool_name}")
     if command:
-        details.append(f"[dim]Command:[/dim] {command}")
+        cmd_display = command if len(command) <= 60 else command[:57] + "..."
+        details.append(f"[dim]Command:[/dim] {cmd_display}")
     if path:
-        details.append(f"[dim]Path:[/dim] {path}")
+        path_display = path if len(path) <= 60 else "..." + path[-57:]
+        details.append(f"[dim]Path:[/dim] {path_display}")
     if tool_call_id:
         details.append(f"[dim]Tool Call ID:[/dim] {tool_call_id}")
 

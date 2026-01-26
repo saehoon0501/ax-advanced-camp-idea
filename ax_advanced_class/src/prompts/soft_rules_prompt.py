@@ -366,11 +366,17 @@ TodoWrite supports two modes via the `merge` parameter:
 
 ### Task Management Rules
 
-- Update task status in real-time as you work
-- Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+CRITICAL: You MUST call todo_write with merge=True every time a task status changes:
+- BEFORE starting a task → mark it as "in_progress"
+- IMMEDIATELY after completing a task → mark it as "completed"
+- When blocked → keep as "in_progress" and add a new task for the blocker
+
+Rules:
+- Update task status in real-time as you work (do NOT batch updates)
 - Exactly ONE task must be in_progress at any time (not less, not more)
 - Complete current tasks before starting new ones
 - Use merge=True to update individual tasks efficiently
+- Never skip status updates - the UI depends on accurate status tracking
 
 ### Task Completion Requirements
 
