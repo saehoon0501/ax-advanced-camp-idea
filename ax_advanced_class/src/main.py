@@ -22,8 +22,21 @@ import truststore
 truststore.inject_into_ssl()
 
 import asyncio
+import logging
 import uuid
 from typing import Optional
+
+
+class _NoIndexedRunIDFilter(logging.Filter):
+    """Filter out TracerException 'No indexed run ID' errors during GraphInterrupt."""
+
+    def filter(self, record):
+        return "No indexed run ID" not in record.getMessage()
+
+
+# Apply filter to LangChain callback loggers
+logging.getLogger("langchain_core.callbacks.manager").addFilter(_NoIndexedRunIDFilter())
+logging.getLogger("langchain").addFilter(_NoIndexedRunIDFilter())
 
 # Suppress noisy urllib3 exception in Python 3.13
 original_unraisablehook = sys.unraisablehook

@@ -126,5 +126,7 @@ class AgentFactory:
         if spec.system_prompt == "":
             raise ValueError("System prompt is required")
 
-        agent = create_agent(**kwargs)
+        # Subgraphs that call interrupt() must have checkpointer=True
+        # to avoid TracerException errors when interrupt bubbles up
+        agent = create_agent(**kwargs, checkpointer=True)
         return agent.with_config({"recursion_limit": 500, "tags": [spec.name]})

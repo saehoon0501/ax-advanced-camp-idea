@@ -12,7 +12,6 @@ Usage:
 - Mark tasks complete IMMEDIATELY after finishing
 """
 
-from typing import Optional
 from langgraph.types import Command
 from langchain_core.tools import tool
 

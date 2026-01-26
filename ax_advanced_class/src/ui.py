@@ -33,6 +33,46 @@ from ax_advanced_class.src.services import StreamEvent
 
 VERSION = "0.1.0"
 
+
+def format_todo_list(todos: list[dict], style: str = "emoji") -> str:
+    """
+    Format a todo list for display with visual status indicators.
+
+    Args:
+        todos: List of todo items with 'content'/'activeForm' and 'status' fields
+        style: Display style - "emoji" or "checkbox"
+
+    Returns:
+        Formatted string representation of the todo list
+    """
+    if not todos:
+        return "No tasks in todo list."
+
+    lines = []
+
+    for todo in todos:
+        status = todo.get("status", "pending")
+        # Use activeForm for in_progress, content otherwise
+        if status == "in_progress":
+            text = todo.get("activeForm") or todo.get("content", "Unknown task")
+        else:
+            text = todo.get("content", "Unknown task")
+
+        if style == "emoji":
+            if status == "completed":
+                lines.append(f"  ✅ Completed: {text}")
+            elif status == "in_progress":
+                lines.append(f"  🔄 In Progress: {text}")
+            else:  # pending
+                lines.append(f"  ⏳ Pending: {text}")
+        else:  # checkbox style
+            if status == "completed":
+                lines.append(f"  ☒ {text}")
+            else:  # in_progress or pending
+                lines.append(f"  ☐ {text}")
+
+    return "\n".join(lines)
+
 # Icons for different event types
 ICONS = {
     "thinking": "◐",
@@ -202,6 +242,12 @@ def _format_tool_input(tool_name: str, tool_input: dict) -> str:
         if len(path) > 60:
             path = "..." + path[-57:]
         return path
+    elif tool_lower == "todo_write":
+        # Show count of todos being updated
+        todos = tool_input.get("todos", [])
+        merge = tool_input.get("merge", False)
+        action = "Updating" if merge else "Setting"
+        return f"{action} {len(todos)} task(s)"
     elif "write" in tool_lower:
         path = tool_input.get("validated_path", tool_input.get("path", ""))
         if len(path) > 60:
@@ -397,8 +443,14 @@ class StreamingSession:
                                 result_line.append(f"  {input_preview}", style="tool.input")
                                 result_line.append(f"  ({_format_duration(duration)})", style="tool.time")
 
-                                # Show output if meaningful
-                                if event.content and event.content.strip():
+                                # Show formatted output based on tool type
+                                if self.current_tool.lower() == "todo_write":
+                                    # Format todo list with visual indicators
+                                    todos = self.current_tool_input.get("todos", [])
+                                    if todos:
+                                        output = format_todo_list(todos, style="emoji")
+                                        result_line.append(f"\n{output}", style="white")
+                                elif event.content and event.content.strip():
                                     output = _format_tool_output(event.content)
                                     if output:
                                         result_line.append(f"\n  {output}", style="tool.output")
