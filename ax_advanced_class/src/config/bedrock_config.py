@@ -21,7 +21,7 @@ class LLMConfig:
     model_kwargs: Dict[str, Any] = field(
         default_factory=lambda: {
             "max_tokens": 8192,
-            "temperature": 0.8,
+            # "temperature": 0.8,
             "top_p": 0.9,
             "anthropic_version": "bedrock-2023-05-31",
         }
