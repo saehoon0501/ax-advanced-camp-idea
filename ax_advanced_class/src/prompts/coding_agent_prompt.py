@@ -98,6 +98,7 @@ Before ending EVERY session:
 4. **Never leave broken state** - Always commit working code
 5. **Always update progress** - Future agents depend on your notes
 6. **Always commit** - Git-based checkpointing allows recovery from bad changes
+7. **Use todo_list proactively** - Create todos when receiving a goal, mark in_progress before starting, mark completed immediately after finishing
 
 ## Handling Problems
 
@@ -171,46 +172,14 @@ def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
         Complete prompt string with static content first, dynamic content last
     """
     # Extract dynamic context from runtime (set via invoke config)
-    ctx = request.runtime.context if request.runtime else None
-
-    # Handle None context gracefully
-    if ctx is None:
-        ctx = {}
-
-    feature_id = ctx.get("feature_id", "")
-    feature_description = ctx.get("feature_description", "")
-    feature_category = ctx.get("feature_category", "")
-    feature_priority = ctx.get("feature_priority", "")
-    feature_steps = ctx.get("feature_steps", [])
-    feature_dependencies = ctx.get("feature_dependencies", [])
-    session_number = ctx.get("session_number", 1)
-    repository_path = ctx.get("repository_path", "./workspace")
-
-    # Format steps as a readable list
-    steps_formatted = (
-        "\n".join(f"  - {step}" for step in feature_steps) if feature_steps else "  - No specific steps defined"
-    )
-
-    # Format dependencies
-    deps_formatted = ", ".join(feature_dependencies) if feature_dependencies else "None"
+    state = request.state
 
     # Build the dynamic portion (placed at the END for cache optimization)
     dynamic_content = f"""
 
 === CURRENT SESSION CONTEXT ===
 
-**Feature to Implement:**
-- ID: {feature_id}
-- Description: {feature_description}
-- Category: {feature_category}
-- Priority: {feature_priority}
-- Implementation Steps:
-{steps_formatted}
-- Dependencies: {deps_formatted}
-
-**Session Information:**
-- Session Number: {session_number}
-- Repository: {repository_path}
+todo_list: {state.get("todo_list", [])}
 
 Start your session by following PHASE 1 (Recovery & Orientation) as described above."""
 

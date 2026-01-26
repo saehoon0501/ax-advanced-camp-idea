@@ -198,16 +198,20 @@ class LongRunningOrchestrator:
         """
         Initializer agent node.
         """
-        result = self.initializer_agent.invoke({"messages": state.get("messages", [])})
-
+        result = self.initializer_agent.invoke({
+            "messages": state.get("messages", []),
+            "todo_list": [],
+        })
         return {"messages": [AIMessage(content=result["messages"][-1].content)]}
 
     def _coding_node(self, state: OrchestratorState) -> dict:
         """
         Coding agent node.
         """
-        # Simple response for testing the flow
-        result = self.coding_agent.invoke({"messages": state.get("messages", [])})
+        result = self.coding_agent.invoke({
+            "messages": state.get("messages", []),
+            "todo_list": [],
+        })
         return {"messages": [AIMessage(content=result["messages"][-1].content)]}
 
     def invoke(

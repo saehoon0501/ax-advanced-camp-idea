@@ -110,6 +110,7 @@ This script helps the Coding Agent understand:
 3. **Prioritize correctly** - Core functionality = high, nice-to-have = low
 4. **Consider dependencies** - List dependencies so Coding Agent knows the order
 5. **Think like a QA** - Each feature should be testable by a real user
+6. **Use todo_list proactively** - Create todos when receiving a goal, mark in_progress before starting, mark completed immediately after finishing
 
 ## Output Summary
 
@@ -154,27 +155,17 @@ def initializer_agent_dynamic_prompt(request: ModelRequest) -> str:
         Complete prompt string with static content first, dynamic content last
     """
     # Extract dynamic context from runtime (set via invoke config)
-    ctx = request.runtime.context if request.runtime else None
-
-    # Handle None context gracefully
-    if ctx is None:
-        ctx = {}
-
-    project_name = ctx.get("project_name", "Unnamed Project")
-    project_description = ctx.get("project_description", "No description provided")
-    repository_path = ctx.get("repository_path", "./workspace")
+    state = request.state
 
     # Build the dynamic portion (placed at the END for cache optimization)
     dynamic_content = f"""
 
 === PROJECT CONTEXT ===
 
-**Project Name:** {project_name}
-**Description:** {project_description}
-**Repository Path:** {repository_path}
+todo_list: {state.get("todo_list", [])}
 
 Please perform the following setup tasks:
-1. Break down the project into 50-200 specific, testable features
+1. Break down the project into 10-50 specific, testable features
 2. Create the feature_list.json file with proper structure
 3. Create the progress.md file for session tracking
 4. Create init.sh script for session continuity (and dev server if applicable)
