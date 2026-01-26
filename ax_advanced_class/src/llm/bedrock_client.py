@@ -1,17 +1,9 @@
 from __future__ import annotations
 from typing import Dict, Optional, Any, TypedDict
 from langchain_aws.chat_models import ChatBedrock
-from botocore.config import Config as BotoConfig
 import functools
 
-from ax_advanced_class.src.config.bedrock_config import LLMConfig
-
-# Timeout configuration for long-running agent tasks
-DEFAULT_BOTO_CONFIG = BotoConfig(
-    read_timeout=300,  # 5 minutes for reading response
-    connect_timeout=60,  # 1 minute for connection
-    retries={"max_attempts": 3},
-)
+from ax_advanced_class.src.config.bedrock_config import LLMConfig, DEFAULT_BOTO_CONFIG
 
 
 class LLMOverride(TypedDict, total=False):
