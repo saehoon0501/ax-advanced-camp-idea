@@ -44,7 +44,7 @@ original_unraisablehook = sys.unraisablehook
 
 def _handle_unraisable(unraisable):
     # Suppress ValueError: I/O operation on closed file from urllib3/http.client
-    if unraisable.exc_type is ValueError and str(unraisable.exc_value) == "I/O operation on closed file":
+    if unraisable.exc_type is ValueError and "I/O operation on closed file" in str(unraisable.exc_value):
         return
     original_unraisablehook(unraisable)
 
