@@ -112,6 +112,7 @@ class PermissionConfig:
     blocked_commands: FrozenSet[str] = field(
         default_factory=lambda: frozenset(
             {
+                "cd",
                 # System destruction / control
                 "mkfs",
                 "fdisk",
