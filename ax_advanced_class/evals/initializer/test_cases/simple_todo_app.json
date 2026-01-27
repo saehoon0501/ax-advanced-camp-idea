@@ -1,0 +1,7 @@
+{
+  "name": "Simple Todo App",
+  "description": "A basic todo list web application with the following features:\n\n1. Users can create, read, update, and delete todo items\n2. Each todo has a title, description, and completion status\n3. Todos are persisted in a database\n4. Simple REST API for all operations\n5. Basic web UI to interact with todos\n6. User authentication (login/logout)\n7. Users can only see their own todos",
+  "expected_min_features": 10,
+  "expected_categories": ["functional", "ui", "security"],
+  "notes": "Should include CRUD operations, auth, and basic UI components"
+}
