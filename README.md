@@ -23,6 +23,24 @@ AI 에이전트가 복잡한 작업을 수행할 때, 컨텍스트 윈도우 제
 
 "Build a clone of claude.ai"처럼 고수준 요구사항을 받아, 200+ 기능을 가진 풀스택 웹 앱을 여러 세션에 걸쳐 완성합니다.
 
+### 최종 형태(개념도)
+
+각 실행은 “대화의 기억”이 아니라, **워크스페이스/깃에 남아 있는 상태**를 기반으로 이어서 달리는 것을 목표로 합니다.
+
+```
+User/CLI
+  ↓
+Orchestrator (라우팅 + 상태 인계)
+  ↓
+Agents (initializer / coding)
+  ↓
+Middleware (컨텍스트 예산 + 정규화 + 가드)
+  ↓
+Tools (bash/files/etc.)
+  ↓
+Workspace + Git (지속 상태)
+```
+
 ### 두 가지 에이전트
 
 #### 1. Initializer Agent (최초 세션)
@@ -82,11 +100,35 @@ NEVER declare project complete until all features pass.
 | 기능을 검증 없이 완료 표시   | Feature list에 테스트 단계 포함 | End-to-end 테스트 후에만 passes=true        |
 | 앱 실행 방법을 매번 파악     | init.sh 스크립트 작성           | 세션 시작 시 init.sh 읽기                   |
 
+### 시나리오가 합쳐지는 방식 (Aggregation Story)
+
+시나리오들을 순서대로 구현하면, 최종적으로 시스템은 이런 흐름으로 자연스럽게 연결됩니다:
+
+1. Orchestrator가 agent를 호출하되, orchestrator에는 **핵심 요약만** 남겨 컨텍스트가 터지지 않게 합니다.
+2. Agent 내부에서 대화가 길어지거나 tool output이 장황해도, middleware가 **압축/정규화**해 다음 추론이 가능하게 합니다.
+3. Initializer가 “다음에 할 일”을 구조화해 남기고, Coding agent는 그걸 읽어 **한 번에 하나씩** 완성합니다.
+4. 세션이 끝날 때는 “다음 실행이 바로 이어받을 수 있게” 인계 정보를 남깁니다.
+5. “완료처럼 보이는 것”이 “완료”로 넘어가지 않도록, 산출물은 평가/검증으로 한번 더 걸러냅니다.
+
 ---
 
 ## 🧩 Small Scenarios: Context Engineering Components
 
 각 시나리오는 **Main Scenario를 구현하는 데 필요한 Context Engineering 패턴**을 학습합니다.
+
+### 시나리오 인덱스 (구현 순서)
+
+아래 목록은 `ax_advanced_class/scenarios/`에 있는 파일 기준으로 정리했습니다.
+
+1. `1.orchestrator_agent_boundary.md`
+2. `2.auto_summarizer.md`
+3. `3.tool_output_trimmer.md`
+4. `4.feature_list_manager.md`
+5. `5.progress_tracker.md`
+6. `6.state_recovery.md`
+7. `7.incremental_work_controller.md`
+8. `8.session_task_planner.md`
+9. `9.agent_evaluator.md`
 
 ### Phase 1: Token Management (토큰 효율적 관리)
 
@@ -147,19 +189,19 @@ NEVER declare project complete until all features pass.
 **학습 목표**: 점진적 개발 패턴, scope 제어
 **파일**: `7.incremental_work_controller.md`
 
-#### 8. Agent Evaluator
+#### 8. Session Task Planner
+
+**원칙**: 세션 시작 시 계획을 세우고(체크리스트), 계획에 맞춰 진행하며 드리프트를 막기
+**적용**: Coding Agent가 feature steps를 todolist로 만들고 상태(pending/in_progress/completed)로 추적
+**학습 목표**: 계획을 “컨텍스트 앵커”로 쓰는 방법, todolist 기반 진행 제어
+**파일**: `8.session_task_planner.md`
+
+#### 9. Agent Evaluator
 
 **원칙**: 에이전트 산출물을 체계적으로 검증 (Code-based + LLM-based)
-**적용**: Initializer Agent의 feature_list.json, progress.md, init.sh 품질 평가
+**적용**: feature_list.json, progress.md, init.sh 등 산출물 품질 평가
 **학습 목표**: ATIS 품질 기준, 가중 평균 점수 계산, Grader 패턴
-**파일**: `8.agent_evaluator.md`
-
-#### 9. Clean State Committer
-
-**원칙**: 세션 종료 전 clean state로 정리
-**적용**: Coding Agent가 git commit + progress 업데이트 + 앱 상태 확인
-**학습 목표**: 다음 세션이 즉시 시작 가능한 상태 유지
-**파일**: `9.clean_state_committer.md`
+**파일**: `9.agent_evaluator.md`
 
 ---
 
