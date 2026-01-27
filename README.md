@@ -184,16 +184,16 @@ Initializer Agent의 산출물(feature_list.json, progress.md, init.sh)을 평�
 
 ```bash
 # Test case JSON 파일로 실행
-python -m ax_advanced_class.evals.initializer.run_eval \
+uv run -m ax_advanced_class.evals.initializer.run_eval \
   ax_advanced_class/evals/initializer/test_cases/simple_todo_app.json
 
 # Quality grading sample size 조정 (기본값: 10)
-python -m ax_advanced_class.evals.initializer.run_eval \
+uv run -m ax_advanced_class.evals.initializer.run_eval \
   ax_advanced_class/evals/initializer/test_cases/simple_todo_app.json \
   --quality-sample-size 20
 
 # 결과를 JSON 파일로 저장
-python -m ax_advanced_class.evals.initializer.run_eval \
+uv run -m ax_advanced_class.evals.initializer.run_eval \
   ax_advanced_class/evals/initializer/test_cases/simple_todo_app.json \
   --output results/initializer_eval_result.json
 ```
@@ -214,40 +214,39 @@ python -m ax_advanced_class.evals.initializer.run_eval \
 
 ### Coding Agent Eval
 
-Coding Agent의 세션 행동과 코드 품질을 평가합니다.
+Coding Agent의 세션 행동을 평가합니다.
 
 #### Graders
 
 | Grader                 | 가중치 | 설명                                              |
 | ---------------------- | ------ | ------------------------------------------------- |
-| SingleFeatureGrader    | 30%    | 한 세션에 하나의 기능만 구현했는지 검증           |
-| CodeQualityGrader      | 25%    | LLM 기반 코드 품질 평가                           |
-| SessionLifecycleGrader | 20%    | START → WORK → END 세션 라이프사이클 준수 검증   |
-| TodoListGrader         | 15%    | 에이전트 상태의 todo list 관리 품질               |
-| StruggleGrader         | 10%    | 디버깅 반복, 무한 루프 등 struggling 패턴 감지    |
+| SingleFeatureGrader    | 40%    | 한 세션에 하나의 기능만 구현했는지 검증           |
+| SessionLifecycleGrader | 26.7%  | START → WORK → END 세션 라이프사이클 준수 검증   |
+| TodoListGrader         | 20%    | 에이전트 상태의 todo list 관리 품질               |
+| StruggleGrader         | 13.3%  | 디버깅 반복, 무한 루프 등 struggling 패턴 감지    |
 
 #### 실행 방법
 
 ```bash
 # 기본 실행 (./workspace 디렉토리 사용)
 # 먼저 initializer agent로 workspace를 설정해야 함
-python -m ax_advanced_class.evals.coding.run_eval
+uv run -m ax_advanced_class.evals.coding.run_eval
 
 # Test case JSON 파일로 실행
-python -m ax_advanced_class.evals.coding.run_eval \
+uv run -m ax_advanced_class.evals.coding.run_eval \
   --test-case ax_advanced_class/evals/coding/test_cases/basic.json
 
 # 특정 workspace 디렉토리 지정
-python -m ax_advanced_class.evals.coding.run_eval \
+uv run -m ax_advanced_class.evals.coding.run_eval \
   --workspace ./my_workspace
 
 # Agent 실행 없이 기존 workspace grading만 수행
-python -m ax_advanced_class.evals.coding.run_eval \
+uv run -m ax_advanced_class.evals.coding.run_eval \
   --workspace ./workspace \
   --skip-agent
 
 # 결과를 JSON 파일로 저장
-python -m ax_advanced_class.evals.coding.run_eval \
+uv run -m ax_advanced_class.evals.coding.run_eval \
   --output results/coding_eval_result.json
 ```
 
@@ -262,7 +261,7 @@ Coding Agent eval을 실행하기 전에 workspace에 다음 파일이 필요합
 python ax_advanced_class/main.py init "Build a simple todo app"
 
 # 그 다음 Coding Agent eval 실행
-python -m ax_advanced_class.evals.coding.run_eval
+uv run -m ax_advanced_class.evals.coding.run_eval
 ```
 
 #### Pass 기준
@@ -349,7 +348,6 @@ ax_advanced_class/
 │       │   ├── todolist_grader.py
 │       │   ├── single_feature_grader.py
 │       │   ├── session_lifecycle_grader.py
-│       │   ├── code_quality_grader.py
 │       │   └── struggle_grader.py
 │       └── run_eval.py      # Eval orchestrator
 └── tests/                   # 각 시나리오 테스트
@@ -405,11 +403,11 @@ python main.py --scenario web_app_builder --agent coding
 
 # 4. Evals 실행
 # Initializer Agent Eval
-python -m ax_advanced_class.evals.initializer.run_eval \
+uv run -m ax_advanced_class.evals.initializer.run_eval \
   ax_advanced_class/evals/initializer/test_cases/simple_todo_app.json
 
 # Coding Agent Eval
-python -m ax_advanced_class.evals.coding.run_eval
+uv run -m ax_advanced_class.evals.coding.run_eval
 ```
 
 Happy coding! 🎉
