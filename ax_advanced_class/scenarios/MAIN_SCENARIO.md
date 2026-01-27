@@ -261,17 +261,17 @@ project_root/
 
 각 시나리오는 이 Main Scenario의 특정 부분을 담당합니다:
 
-| 시나리오                 | Main Scenario에서의 역할            | Initializer | Coding |
-| ------------------------ | ----------------------------------- | ----------- | ------ |
-| 1. Rolling Window        | 대화가 길어질 때 오래된 메시지 제거 | -           | ✓      |
-| 2. Auto Summarizer       | Progress file이 너무 길어질 때 압축 | -           | ✓      |
-| 3. Tool Output Trimmer   | 브라우저 자동화 로그 압축           | -           | ✓      |
-| 4. Feature List Manager  | feature_list.json 생성 및 업데이트  | ✓           | ✓      |
-| 5. Git Progress Tracker  | Git 커밋 + progress file 관리       | ✓           | ✓      |
-| 6. State Recovery        | 세션 시작 시 컨텍스트 복원          | -           | ✓      |
-| 7. Incremental Work      | 한 번에 하나의 기능만 작업          | -           | ✓      |
-| 8. Test Validator        | End-to-end 테스트 실행 및 검증      | -           | ✓      |
-| 9. Clean State Committer | 세션 종료 시 깨끗한 상태 유지       | -           | ✓      |
+| 시나리오                        | Main Scenario에서의 역할                         | Initializer | Coding |
+| ------------------------------- | ------------------------------------------------ | ----------- | ------ |
+| 1. Orchestrator-Agent Boundary  | Sub-agent → Orchestrator: 최종 요약만 전달       | ✓           | ✓      |
+| 2. Auto Summarizer              | Agent 내부 대화가 길어질 때 압축 (middleware)    | ✓           | ✓      |
+| 3. Tool Output Trimmer          | Tool 출력 압축 (middleware)                      | ✓           | ✓      |
+| 4. Feature List Manager         | feature_list.json 생성 (구조화된 작업 목록)      | ✓           | -      |
+| 5. Progress Tracker             | progress.md + init.sh 생성                       | ✓           | -      |
+| 6. State Recovery               | 세션 시작 시 git/progress에서 컨텍스트 복원      | -           | ✓      |
+| 7. Incremental Work             | 기능 선택 + 구현 + 상태 업데이트                 | -           | ✓      |
+| 8. Agent Evaluator              | 에이전트 산출물 품질 평가 (Code-based + LLM)     | ✓           | -      |
+| 9. Clean State Committer        | 세션 종료 시 깨끗한 상태 유지 + 커밋             | -           | ✓      |
 
 ## 📊 성공 메트릭
 
@@ -325,9 +325,9 @@ project_root/
 - Day 1-2: **시나리오 7 (Incremental Work)**
   - 구현: `work_controller.py`
   - 테스트: `test_7_work_controller.py`
-- Day 3-4: **시나리오 8 (Test Validator)**
-  - 구현: `test_validator.py`
-  - 테스트: `test_8_test_validator.py`
+- Day 3-4: **시나리오 8 (Agent Evaluator)**
+  - 구현: `evals/initializer/graders/`
+  - 테스트: `test_8_agent_evaluator.py`
 - Day 5-6: **시나리오 9 (Clean State)**
   - 구현: `state_committer.py`
   - 테스트: `test_9_state_committer.py`
@@ -420,7 +420,6 @@ class CodingAgent:
 ```bash
 cd ax_advanced_class
 pip install -r requirements.txt
-playwright install chromium
 ```
 
 ### 2. 개별 시나리오 실습
@@ -472,7 +471,7 @@ head -n 20 progress.md
 - [LangGraph Multi-Agent Systems](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [Test-Driven Development](https://martinfowler.com/bliki/TestDrivenDevelopment.html)
-- [Playwright End-to-End Testing](https://playwright.dev/docs/intro)
+- [LangSmith: Evaluating LLM Applications](https://docs.smith.langchain.com/evaluation)
 
 ## 🎉 Expected Outcomes
 
