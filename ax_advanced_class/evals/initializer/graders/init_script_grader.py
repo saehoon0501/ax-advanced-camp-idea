@@ -48,7 +48,7 @@ REQUIRED_PATTERNS = {
         "Display progress.md content",
     ),
     "cat_feature_list": (
-        r"(?:cat|less|head|tail|more|jq).*feature_list\.json",
+        r"(?:cat|less|head|tail|more|jq|grep).*feature_list\.json",
         "Display feature_list.json content",
     ),
 }
@@ -61,7 +61,7 @@ ALLOWED_PATTERNS = [
     r"echo\s+",                               # Echo statements (display)
     r"git\s+",                                # Any git command
     r"(?:cat|less|head|tail|more).*progress\.md",    # progress.md access
-    r"(?:cat|less|head|tail|more|jq).*feature_list\.json",  # feature_list.json access
+    r"(?:cat|less|head|tail|more|jq|grep).*feature_list\.json",  # feature_list.json access
 ]
 
 # Patterns that indicate unnecessary commands (penalty)

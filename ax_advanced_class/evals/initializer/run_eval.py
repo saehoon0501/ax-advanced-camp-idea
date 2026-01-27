@@ -15,8 +15,6 @@ truststore.inject_into_ssl()
 
 import argparse
 import json
-import os
-import tempfile
 import uuid
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -99,52 +97,47 @@ def _clean_workspace(workspace_dir: Path) -> None:
             filepath.unlink()
 
 
+# Fixed workspace directory for all evals
+# Must match PermissionConfig().workspace_root default (./workspace from project root)
+WORKSPACE_DIR = Path(__file__).parent.parent.parent.parent / "workspace"
+
+
 def run_eval(
     test_case: dict[str, Any],
-    workspace_dir: Optional[Path] = None,
-    skip_agent: bool = False,
     quality_sample_size: int = 10,
-    clean_workspace: bool = True,
 ) -> EvalReport:
     """
     Run eval for a test case.
 
     Args:
         test_case: Test case dict with 'name' and 'description'
-        workspace_dir: Directory to use for agent output. If None, creates temp dir.
-        skip_agent: If True, skip agent invocation (for testing graders on existing files)
         quality_sample_size: Number of features to sample for quality grading
-        clean_workspace: If True, remove existing agent output files before running
 
     Returns:
         EvalReport with all grader results
     """
     test_name = test_case.get("name", "unknown")
 
-    # Setup workspace
-    if workspace_dir is None:
-        workspace_dir = Path(tempfile.mkdtemp(prefix="eval_"))
-    workspace_dir = Path(workspace_dir)
+    # Use fixed workspace directory
+    workspace_dir = WORKSPACE_DIR
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     feature_list_path = workspace_dir / "feature_list.json"
 
     # Clean workspace before agent run
-    if not skip_agent and clean_workspace:
-        _clean_workspace(workspace_dir)
+    _clean_workspace(workspace_dir)
 
-    # Run agent if not skipping
-    if not skip_agent:
-        try:
-            _run_agent(test_case, workspace_dir)
-        except Exception as e:
-            return EvalReport(
-                test_case_name=test_name,
-                passed=False,
-                overall_score=0.0,
-                agent_error=str(e),
-                workspace_path=str(workspace_dir),
-            )
+    # Run agent
+    try:
+        _run_agent(test_case, workspace_dir)
+    except Exception as e:
+        return EvalReport(
+            test_case_name=test_name,
+            passed=False,
+            overall_score=0.0,
+            agent_error=str(e),
+            workspace_path=str(workspace_dir),
+        )
 
     progress_path = workspace_dir / "progress.md"
     init_script_path = workspace_dir / "init.sh"
@@ -267,17 +260,19 @@ def _run_agent(test_case: dict[str, Any], workspace_dir: Path) -> None:
     # - No ASK permissions (would hang test)
     permission_config = create_eval_permission_config(str(workspace_dir))
 
-    # Create initializer agent directly with eval-specific config
+    # Get the agent spec (contains system_prompt, tools, middleware)
     llm = BedrockClient().get_core()
     spec = initializer_agent_spec(config=permission_config)
 
-    # Create agent with MemorySaver (required for root graph)
+    # Create agent with MemorySaver (required for root graph execution)
+    # Note: AgentFactory uses checkpointer=True which is only for subgraphs
     agent = create_agent(
         model=llm,
         tools=list(spec.tools),
         middleware=list(spec.middleware),
         name=spec.name,
         state_schema=spec.state_schema,
+        system_prompt=spec.system_prompt,
         checkpointer=MemorySaver(),
     )
     agent = agent.with_config({"recursion_limit": 500})
@@ -296,7 +291,7 @@ Create the feature_list.json file in {workspace_dir} with all features needed fo
 
     try:
         _result = agent.invoke(
-            {"messages": [HumanMessage(content=prompt)], "todo_list": []},
+            {"messages": [HumanMessage(content=prompt)]},
             config=config,
         )
     except GraphInterrupt as e:
@@ -309,57 +304,19 @@ Create the feature_list.json file in {workspace_dir} with all features needed fo
         ) from e
 
 
-def run_eval_on_existing(
-    feature_list_path: Path,
-    quality_sample_size: int = 10,
-) -> EvalReport:
-    """
-    Run eval on an existing feature_list.json file (skip agent invocation).
-
-    Args:
-        feature_list_path: Path to existing feature_list.json
-        quality_sample_size: Number of features to sample for quality grading
-
-    Returns:
-        EvalReport with all grader results
-    """
-    test_case = {"name": f"existing:{feature_list_path.name}"}
-    return run_eval(
-        test_case=test_case,
-        workspace_dir=feature_list_path.parent,
-        skip_agent=True,
-        quality_sample_size=quality_sample_size,
-    )
-
-
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="Run initializer agent evals")
     parser.add_argument(
-        "--test-case",
+        "test_case",
         type=Path,
         help="Path to test case JSON file",
-    )
-    parser.add_argument(
-        "--existing",
-        type=Path,
-        help="Path to existing feature_list.json (skip agent)",
-    )
-    parser.add_argument(
-        "--workspace",
-        type=Path,
-        help="Workspace directory for agent output",
     )
     parser.add_argument(
         "--quality-sample-size",
         type=int,
         default=10,
         help="Number of features to sample for quality grading",
-    )
-    parser.add_argument(
-        "--no-clean",
-        action="store_true",
-        help="Skip workspace cleanup before agent run",
     )
     parser.add_argument(
         "--output",
@@ -369,21 +326,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.existing:
-        report = run_eval_on_existing(
-            args.existing,
-            quality_sample_size=args.quality_sample_size,
-        )
-    elif args.test_case:
-        test_case = load_test_case(args.test_case)
-        report = run_eval(
-            test_case=test_case,
-            workspace_dir=args.workspace,
-            quality_sample_size=args.quality_sample_size,
-            clean_workspace=not args.no_clean,
-        )
-    else:
-        parser.error("Either --test-case or --existing is required")
+    print(f"Using workspace: {WORKSPACE_DIR}")
+
+    test_case = load_test_case(args.test_case)
+    report = run_eval(
+        test_case=test_case,
+        quality_sample_size=args.quality_sample_size,
+    )
 
     # Print report
     report_dict = report.to_dict()
