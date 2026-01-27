@@ -28,10 +28,16 @@ from ax_advanced_class.evals.initializer.graders import (
     SchemaGrader,
     DependencyGrader,
     QualityGrader,
+    ProgressGrader,
+    ProgressQualityGrader,
+    InitScriptGrader,
 )
 from ax_advanced_class.evals.initializer.graders.schema_grader import SchemaGradeResult
 from ax_advanced_class.evals.initializer.graders.dependency_grader import DependencyGradeResult
 from ax_advanced_class.evals.initializer.graders.quality_grader import QualityGradeResult
+from ax_advanced_class.evals.initializer.graders.progress_grader import ProgressGradeResult
+from ax_advanced_class.evals.initializer.graders.progress_quality_grader import ProgressQualityGradeResult
+from ax_advanced_class.evals.initializer.graders.init_script_grader import InitScriptGradeResult
 
 
 @dataclass
@@ -46,6 +52,9 @@ class EvalReport:
     schema_result: Optional[SchemaGradeResult] = None
     dependency_result: Optional[DependencyGradeResult] = None
     quality_result: Optional[QualityGradeResult] = None
+    progress_result: Optional[ProgressGradeResult] = None
+    progress_quality_result: Optional[ProgressQualityGradeResult] = None
+    init_script_result: Optional[InitScriptGradeResult] = None
 
     # Execution details
     agent_error: Optional[str] = None
@@ -66,6 +75,12 @@ class EvalReport:
             result["dependency"] = asdict(self.dependency_result)
         if self.quality_result:
             result["quality"] = asdict(self.quality_result)
+        if self.progress_result:
+            result["progress"] = asdict(self.progress_result)
+        if self.progress_quality_result:
+            result["progress_quality"] = asdict(self.progress_quality_result)
+        if self.init_script_result:
+            result["init_script"] = asdict(self.init_script_result)
         return result
 
 
@@ -131,17 +146,41 @@ def run_eval(
                 workspace_path=str(workspace_dir),
             )
 
+    progress_path = workspace_dir / "progress.md"
+    init_script_path = workspace_dir / "init.sh"
+
     # Run schema grader
     schema_grader = SchemaGrader()
     schema_result = schema_grader.grade(feature_list_path)
 
-    # If schema fails, can't run other graders
+    # Run progress graders (independent of schema)
+    progress_grader = ProgressGrader()
+    progress_result = progress_grader.grade(progress_path)
+
+    progress_quality_grader = ProgressQualityGrader()
+    progress_quality_result = progress_quality_grader.grade(progress_path)
+
+    # Run init script grader (independent of schema)
+    init_script_grader = InitScriptGrader()
+    init_script_result = init_script_grader.grade(init_script_path)
+
+    # If schema fails, can't run feature-dependent graders
     if not schema_result.passed:
+        # Calculate partial score: Schema 25%, Progress 10%, Progress Quality 10%, Init Script 5%
+        overall_score = (
+            schema_result.score * 0.25
+            + progress_result.score * 0.10
+            + progress_quality_result.score * 0.10
+            + init_script_result.score * 0.05
+        )
         return EvalReport(
             test_case_name=test_name,
             passed=False,
-            overall_score=schema_result.score * 0.4,  # Schema is 40% of score
+            overall_score=overall_score,
             schema_result=schema_result,
+            progress_result=progress_result,
+            progress_quality_result=progress_quality_result,
+            init_script_result=init_script_result,
             workspace_path=str(workspace_dir),
         )
 
@@ -158,15 +197,25 @@ def run_eval(
     quality_result = quality_grader.grade(features, sample_size=quality_sample_size)
 
     # Calculate overall score (weighted average)
-    # Schema: 40%, Dependency: 30%, Quality: 30%
+    # Schema: 25%, Dependency: 15%, Quality: 20%, Progress: 10%, Progress Quality: 15%, Init Script: 15%
     overall_score = (
-        schema_result.score * 0.4
-        + dependency_result.score * 0.3
-        + quality_result.score * 0.3
+        schema_result.score * 0.25
+        + dependency_result.score * 0.15
+        + quality_result.score * 0.20
+        + progress_result.score * 0.10
+        + progress_quality_result.score * 0.15
+        + init_script_result.score * 0.15
     )
 
     # Passed if all graders pass
-    passed = schema_result.passed and dependency_result.passed and quality_result.passed
+    passed = (
+        schema_result.passed
+        and dependency_result.passed
+        and quality_result.passed
+        and progress_result.passed
+        and progress_quality_result.passed
+        and init_script_result.passed
+    )
 
     return EvalReport(
         test_case_name=test_name,
@@ -175,6 +224,9 @@ def run_eval(
         schema_result=schema_result,
         dependency_result=dependency_result,
         quality_result=quality_result,
+        progress_result=progress_result,
+        progress_quality_result=progress_quality_result,
+        init_script_result=init_script_result,
         workspace_path=str(workspace_dir),
     )
 
