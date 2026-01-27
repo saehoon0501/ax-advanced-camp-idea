@@ -382,7 +382,7 @@ class FileOperationTool:
               a system reminder warning in place of file contents.
 
             Args:
-                file_path: The absolute path to the file to read
+                validated_path: The absolute path to the file to read (required)
                 encoding: File encoding (default: utf-8)
                 offset: The line number to start reading from. Only provide if the file
                         is too large to read at once.
@@ -399,6 +399,9 @@ class FileOperationTool:
             """
             Writes a file to the local filesystem.
 
+            IMPORTANT: Both validated_path AND content are REQUIRED in the same tool call.
+            You must provide the complete file content as a string in the content parameter.
+
             Usage:
             - This tool will overwrite the existing file if there is one at the provided path.
             - If this is an existing file, you MUST use the Read tool first to read the file's
@@ -411,8 +414,8 @@ class FileOperationTool:
               files unless asked.
 
             Args:
-                path: Absolute path to the file to write
-                content: The content to write to the file
+                validated_path: Absolute path to the file to write (required)
+                content: The complete file content to write as a string (required)
             """
             result = self.write_file(validated_path, content)
             if result["success"]:
@@ -449,7 +452,7 @@ class FileOperationTool:
               or use replace_all=True to replace all occurrences
 
             Args:
-                path: Path to the file (absolute path required)
+                validated_path: Path to the file (absolute path required)
                 old_string: The exact string to replace (must be unique unless replace_all=True)
                 new_string: The new string to replace with (must be different from old_string)
                 replace_all: If True, replace all occurrences of old_string (default: False)

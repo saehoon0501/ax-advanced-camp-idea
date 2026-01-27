@@ -451,9 +451,7 @@ class _BashValidator:
             reason=f"Git subcommand '{subcommand}' requires confirmation",
         )
 
-    def _get_highest_priority_result(
-        self, results: List[CommandValidationResult], original_command: str
-    ) -> CommandValidationResult:
+    def _get_highest_priority_result(self, results: List[CommandValidationResult], original_command: str) -> CommandValidationResult:
         """
         Get the highest priority result from a list.
 
@@ -647,18 +645,58 @@ class ToolValidationMiddleware(AgentMiddleware):
         except GraphInterrupt:
             raise
         except Exception as e:
+            error_msg = self._format_tool_error(tool_name, args, e)
             return ToolMessage(
-                content=f"Error: Validation failed. {str(e)}",
+                content=error_msg,
                 tool_call_id=tool_call_id,
                 status="error",
             )
 
+    def _format_tool_error(self, tool_name: str, args: dict, error: Exception) -> str:
+        """
+        Format tool errors with actionable guidance for the agent.
+
+        Parses validation errors to provide clear instructions on how to fix them.
+        """
+        error_str = str(error)
+
+        # Check for Pydantic ValidationError (missing required fields)
+        if "validation error" in error_str.lower() and "field required" in error_str.lower():
+            # Extract missing field names from error message
+            lines = error_str.split("\n")
+            missing_fields = []
+            for i, line in enumerate(lines):
+                if "Field required" in line and i > 0:
+                    # The field name is on the previous line
+                    field_name = lines[i - 1].strip()
+                    if field_name:
+                        missing_fields.append(field_name)
+
+            if missing_fields:
+                provided = ", ".join(f'"{k}"' for k in args.keys()) if args else "none"
+                missing = ", ".join(f'"{f}"' for f in missing_fields)
+                return (
+                    f"Error: Missing required parameter(s) for '{tool_name}' tool.\n"
+                    f"Missing: {missing}\n"
+                    f"Provided: {provided}\n"
+                    f"Action: Retry the tool call with ALL required parameters included."
+                )
+
+        # Check for type errors
+        if "type=" in error_str and "input_value=" in error_str:
+            return (
+                f"Error: Invalid parameter type for '{tool_name}' tool.\n"
+                f"Details: {error_str}\n"
+                f"Action: Check parameter types and retry with correct types."
+            )
+
+        # Default: include original error with guidance
+        return f"Error: Tool '{tool_name}' failed.\n" f"Details: {error_str}\n" f"Action: Review the error and retry with corrected parameters."
+
     def _truncate_output(self, result: ToolMessage | Command) -> ToolMessage | Command:
         """Truncate output if it exceeds MAX_OUTPUT_CHARS."""
         if isinstance(result, ToolMessage) and len(result.content) > MAX_OUTPUT_CHARS:
-            truncated_content = (
-                result.content[:MAX_OUTPUT_CHARS] + f"\n\n[Output truncated at {MAX_OUTPUT_CHARS} characters]"
-            )
+            truncated_content = result.content[:MAX_OUTPUT_CHARS] + f"\n\n[Output truncated at {MAX_OUTPUT_CHARS} characters]"
             return ToolMessage(
                 content=truncated_content,
                 tool_call_id=result.tool_call_id,
