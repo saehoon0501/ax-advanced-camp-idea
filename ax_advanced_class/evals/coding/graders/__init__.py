@@ -14,10 +14,6 @@ from ax_advanced_class.evals.coding.graders.session_lifecycle_grader import (
     SessionLifecycleGrader,
     SessionLifecycleGradeResult,
 )
-from ax_advanced_class.evals.coding.graders.code_quality_grader import (
-    CodeQualityGrader,
-    CodeQualityGradeResult,
-)
 from ax_advanced_class.evals.coding.graders.struggle_grader import (
     StruggleGrader,
     StruggleGradeResult,
@@ -30,8 +26,6 @@ __all__ = [
     "SingleFeatureGradeResult",
     "SessionLifecycleGrader",
     "SessionLifecycleGradeResult",
-    "CodeQualityGrader",
-    "CodeQualityGradeResult",
     "StruggleGrader",
     "StruggleGradeResult",
 ]

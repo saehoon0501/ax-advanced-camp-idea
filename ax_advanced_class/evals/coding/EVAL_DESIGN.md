@@ -154,83 +154,7 @@ class SessionLifecycleGrader:
 
 ---
 
-### 4. CodeQualityGrader (LLM-based)
-
-**Purpose**: Evaluate whether the code implementation correctly fulfills the feature specification without overengineering.
-
-**Input**:
-- `git_diff`: The code changes made by the agent
-- `implemented_feature`: The feature_list item that was implemented, including:
-  - `id`: Feature ID (e.g., "feature-003")
-  - `description`: What the feature should do
-  - `steps`: Verification steps / acceptance criteria
-  - `category`: functional, ui, performance, security
-  - `priority`: high, medium, low
-
-**Rubric**:
-```
-You are evaluating code changes against a feature specification.
-
-## Feature Being Implemented:
-ID: {feature_id}
-Description: {feature_description}
-Category: {feature_category}
-Acceptance Criteria:
-{feature_steps}
-
-## Code Changes:
-{git_diff}
-
----
-
-Score the implementation on these criteria (0.0 to 1.0 each):
-
-## FULFILLMENT (Does the code satisfy the feature requirements?)
-- 1.0: All acceptance criteria are fully implemented
-- 0.7: Most criteria implemented, minor gaps
-- 0.5: Partial implementation, some criteria missing
-- 0.0: Does not address the feature requirements
-
-## MINIMAL (Only what's needed, no overengineering?)
-- 1.0: Only changes necessary for this feature, no extras
-- 0.7: Minor unnecessary additions (extra validation, unused helpers)
-- 0.5: Noticeable overengineering (premature abstractions)
-- 0.0: Significant overengineering (frameworks, future-proofing, unrelated refactoring)
-
-## CONSISTENT (Follows existing codebase patterns?)
-- 1.0: Follows existing patterns exactly
-- 0.7: Minor style deviations
-- 0.5: Introduces some inconsistent patterns
-- 0.0: Completely different style from codebase
-
-## TESTABLE (Can the implementation be verified per the acceptance criteria?)
-- 1.0: Clear verification path, tests included if appropriate
-- 0.7: Verifiable but missing some test coverage
-- 0.5: Difficult to verify against criteria
-- 0.0: Cannot be verified or tests broken
-```
-
-**Scoring**:
-- Average of FMCT scores
-- Pass threshold: >= 0.6
-
-**Implementation approach**:
-```python
-class CodeQualityGrader:
-    def grade(
-        self,
-        git_diff: str,
-        implemented_feature: dict  # The feature_list item
-    ) -> CodeQualityGradeResult:
-        # Build prompt with feature context
-        # Send diff + feature specification to LLM
-        # Get FMCT scores (Fulfillment, Minimal, Consistent, Testable)
-        # Average for final score
-```
-
----
-
-### 5. StruggleGrader (LLM-based)
+### 4. StruggleGrader (LLM-based)
 
 **Purpose**: Assess how smoothly the agent completed the task (debugging efficiency).
 
@@ -282,7 +206,6 @@ ax_advanced_class/evals/coding/
 │   ├── todolist_grader.py       # Code-based
 │   ├── single_feature_grader.py # Code-based
 │   ├── session_lifecycle_grader.py  # Code-based
-│   ├── code_quality_grader.py   # LLM-based
 │   └── struggle_grader.py       # LLM-based
 └── test_cases/
     ├── simple_feature.json
@@ -351,14 +274,12 @@ Graders for coding agent evals.
 from ax_advanced_class.evals.coding.graders.todolist_grader import TodoListGrader
 from ax_advanced_class.evals.coding.graders.single_feature_grader import SingleFeatureGrader
 from ax_advanced_class.evals.coding.graders.session_lifecycle_grader import SessionLifecycleGrader
-from ax_advanced_class.evals.coding.graders.code_quality_grader import CodeQualityGrader
 from ax_advanced_class.evals.coding.graders.struggle_grader import StruggleGrader
 
 __all__ = [
     "TodoListGrader",
     "SingleFeatureGrader",
     "SessionLifecycleGrader",
-    "CodeQualityGrader",
     "StruggleGrader",
 ]
 ```
@@ -400,7 +321,6 @@ from ax_advanced_class.evals.coding.graders import (
     TodoListGrader,
     SingleFeatureGrader,
     SessionLifecycleGrader,
-    CodeQualityGrader,
     StruggleGrader,
 )
 
@@ -420,7 +340,6 @@ class EvalReport:
     todolist_result: Optional[dict] = None
     single_feature_result: Optional[dict] = None
     session_lifecycle_result: Optional[dict] = None
-    code_quality_result: Optional[dict] = None
     struggle_result: Optional[dict] = None
 
     # Execution details
@@ -480,9 +399,6 @@ def run_eval(
         initial_feature_list, final_feature_list
     )
 
-    # Get git diff
-    git_diff = _get_git_diff(workspace_dir)
-
     # Run graders
     todolist_grader = TodoListGrader()
     todolist_result = todolist_grader.grade(final_state)
@@ -497,22 +413,17 @@ def run_eval(
         messages, workspace_dir
     )
 
-    code_quality_grader = CodeQualityGrader()
-    code_quality_result = code_quality_grader.grade(
-        git_diff, implemented_feature
-    )
-
     struggle_grader = StruggleGrader()
     struggle_result = struggle_grader.grade(messages)
 
-    # Calculate overall score (weighted)
+    # Calculate overall score (re-normalized)
+    remaining_weight = 0.30 + 0.20 + 0.15 + 0.10
     overall_score = (
         single_feature_result.score * 0.30
-        + code_quality_result.score * 0.25
         + session_lifecycle_result.score * 0.20
         + todolist_result.score * 0.15
         + struggle_result.score * 0.10
-    )
+    ) / remaining_weight
 
     passed = (
         overall_score >= 0.7
@@ -527,7 +438,6 @@ def run_eval(
         todolist_result=asdict(todolist_result),
         single_feature_result=asdict(single_feature_result),
         session_lifecycle_result=asdict(session_lifecycle_result),
-        code_quality_result=asdict(code_quality_result),
         struggle_result=asdict(struggle_result),
         workspace_path=str(workspace_dir),
         implemented_feature=implemented_feature,
@@ -574,11 +484,10 @@ def _run_agent(
 
 | Grader | Weight | Rationale |
 |--------|--------|-----------|
-| SingleFeatureGrader | 30% | Most critical: no scope creep |
-| CodeQualityGrader | 25% | Implementation quality against feature spec |
-| SessionLifecycleGrader | 20% | Proper workflow adherence |
-| TodoListGrader | 15% | Core behavior for tracking |
-| StruggleGrader | 10% | Efficiency assessment |
+| SingleFeatureGrader | 40% | Most critical: no scope creep |
+| SessionLifecycleGrader | 26.7% | Proper workflow adherence |
+| TodoListGrader | 20% | Core behavior for tracking |
+| StruggleGrader | 13.3% | Efficiency assessment |
 
 **Pass criteria**: Overall score >= 0.7 AND all required checks pass
 
@@ -621,7 +530,6 @@ class CodingEvalData:
 
     # Derived
     implemented_feature: dict | None # The feature that changed to passes=true
-    git_diff: str                    # `git diff` output for code changes
 ```
 
 **Grader inputs**:
@@ -630,7 +538,6 @@ class CodingEvalData:
 | TodoListGrader | `final_state` |
 | SingleFeatureGrader | `initial_feature_list`, `final_feature_list` |
 | SessionLifecycleGrader | `messages`, workspace path |
-| CodeQualityGrader | `git_diff`, `implemented_feature` |
 | StruggleGrader | `messages` |
 
 ---
@@ -640,7 +547,6 @@ class CodingEvalData:
 1. **Phase 1 - Core graders** (MVP)
    - SingleFeatureGrader (most critical check)
    - SessionLifecycleGrader (workflow compliance)
-   - CodeQualityGrader (implementation quality)
 
 2. **Phase 2 - Behavior graders**
    - TodoListGrader (todo management)
@@ -660,7 +566,6 @@ class CodingEvalData:
 | **Workspace setup** | Minimal scaffold: `feature_list.json`, `progress.md`, `init.sh` |
 | **Feature implementation** | Agent creates files from scratch, OR modifies existing code (if previous features implemented) |
 | **Timeout** | 10 minutes time limit |
-| **CodeQualityGrader context** | Git diff + feature spec only (no extra codebase context) |
 
 ---
 

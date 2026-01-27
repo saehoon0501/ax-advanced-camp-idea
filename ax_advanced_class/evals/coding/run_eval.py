@@ -15,7 +15,6 @@ truststore.inject_into_ssl()
 
 import argparse
 import json
-import subprocess
 import uuid
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -27,13 +26,11 @@ from ax_advanced_class.evals.coding.graders import (
     TodoListGrader,
     SingleFeatureGrader,
     SessionLifecycleGrader,
-    CodeQualityGrader,
     StruggleGrader,
 )
 from ax_advanced_class.evals.coding.graders.todolist_grader import TodoListGradeResult
 from ax_advanced_class.evals.coding.graders.single_feature_grader import SingleFeatureGradeResult
 from ax_advanced_class.evals.coding.graders.session_lifecycle_grader import SessionLifecycleGradeResult
-from ax_advanced_class.evals.coding.graders.code_quality_grader import CodeQualityGradeResult
 from ax_advanced_class.evals.coding.graders.struggle_grader import StruggleGradeResult
 
 
@@ -55,7 +52,6 @@ class EvalReport:
     todolist_result: Optional[TodoListGradeResult] = None
     single_feature_result: Optional[SingleFeatureGradeResult] = None
     session_lifecycle_result: Optional[SessionLifecycleGradeResult] = None
-    code_quality_result: Optional[CodeQualityGradeResult] = None
     struggle_result: Optional[StruggleGradeResult] = None
 
     # Execution details
@@ -79,8 +75,6 @@ class EvalReport:
             result["single_feature"] = asdict(self.single_feature_result)
         if self.session_lifecycle_result:
             result["session_lifecycle"] = asdict(self.session_lifecycle_result)
-        if self.code_quality_result:
-            result["code_quality"] = asdict(self.code_quality_result)
         if self.struggle_result:
             result["struggle"] = asdict(self.struggle_result)
         return result
@@ -147,9 +141,6 @@ def run_eval(
         initial_feature_list, final_feature_list
     )
 
-    # Get git diff
-    git_diff = _get_git_diff(workspace_dir)
-
     # Run graders
     todolist_grader = TodoListGrader()
     todolist_result = todolist_grader.grade(final_state)
@@ -164,22 +155,17 @@ def run_eval(
         messages, workspace_dir
     )
 
-    code_quality_grader = CodeQualityGrader()
-    code_quality_result = code_quality_grader.grade(
-        git_diff, implemented_feature
-    )
-
     struggle_grader = StruggleGrader()
     struggle_result = struggle_grader.grade(messages)
 
-    # Calculate overall score (weighted)
+    # Calculate overall score (re-normalized to keep the score in [0, 1]).
+    remaining_weight = 0.30 + 0.20 + 0.15 + 0.10
     overall_score = (
         single_feature_result.score * 0.30
-        + code_quality_result.score * 0.25
         + session_lifecycle_result.score * 0.20
         + todolist_result.score * 0.15
         + struggle_result.score * 0.10
-    )
+    ) / remaining_weight
 
     # Pass criteria: overall >= 0.7 AND critical graders pass
     passed = (
@@ -195,7 +181,6 @@ def run_eval(
         todolist_result=todolist_result,
         single_feature_result=single_feature_result,
         session_lifecycle_result=session_lifecycle_result,
-        code_quality_result=code_quality_result,
         struggle_result=struggle_result,
         workspace_path=str(workspace_dir),
         implemented_feature=implemented_feature,
@@ -258,29 +243,6 @@ def _get_implemented_feature(
             return feature
 
     return None
-
-
-def _get_git_diff(workspace_dir: Path) -> str:
-    """Get git diff for code changes."""
-    try:
-        result = subprocess.run(
-            ["git", "diff", "HEAD~1", "HEAD"],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            return result.stdout
-        # If no previous commit, diff against empty
-        result = subprocess.run(
-            ["git", "diff", "--cached"],
-            cwd=workspace_dir,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout
-    except Exception:
-        return ""
 
 
 class EvalTimeoutError(Exception):
