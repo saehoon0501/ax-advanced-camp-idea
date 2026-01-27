@@ -73,6 +73,7 @@ def format_todo_list(todos: list[dict], style: str = "emoji") -> str:
 
     return "\n".join(lines)
 
+
 # Icons for different event types
 ICONS = {
     "thinking": "◐",
@@ -118,19 +119,9 @@ def print_welcome(workspace: str = "./workspace"):
       /     つ   [dim]이번 실습을 도와드릴 갓찌입니다~[/dim]
       """
 
-    left_content = (
-        "\n[bold]Welcome to Incubation Camp![/bold]\n" f"{mascot}\n\n" f"[dim]{os.path.abspath(workspace)}[/dim]"
-    )
+    left_content = "\n[bold]Welcome to Incubation Camp![/bold]\n" f"{mascot}\n\n" f"[dim]{os.path.abspath(workspace)}[/dim]"
 
-    right_content = (
-        "[bold]Commands[/bold]\n"
-        "[dim]─────────────────────────────────────[/dim]\n"
-        "[bold]/init[/bold] <name> <desc>  Initialize project\n"
-        "[bold]/status[/bold]             Show project status\n"
-        "[bold]/run[/bold]                Run coding session\n"
-        "[bold]/workspace[/bold] <path>   Set workspace path\n"
-        "[bold]exit[/bold]                Exit the CLI"
-    )
+    right_content = "[bold]Commands[/bold]\n" "[dim]─────────────────────────────────────[/dim]\n" "[bold]exit[/bold]                Exit the CLI"
 
     table = Table(show_header=False, box=None, padding=(0, 1), expand=True)
     table.add_column(ratio=2)
@@ -199,9 +190,7 @@ def print_status(orchestrator: LongRunningOrchestrator, config: dict, workspace:
     console.print(f"  Workspace: [dim]{os.path.abspath(workspace)}[/dim]")
 
     if state:
-        console.print(
-            f"  Initialized: {'[green]Yes[/green]' if state.get('is_initialized') else '[yellow]No[/yellow]'}"
-        )
+        console.print(f"  Initialized: {'[green]Yes[/green]' if state.get('is_initialized') else '[yellow]No[/yellow]'}")
         console.print(f"  Sessions: {state.get('session_count', 0)}")
 
         features = state.get("feature_list", [])
@@ -360,9 +349,7 @@ class StreamingSession:
             console.print()  # Add gap after text block
             self.current_segment = ""
 
-    async def display_events(
-        self, event_generator: AsyncGenerator[StreamEvent, None], user_input: str
-    ) -> Optional[StreamEvent]:
+    async def display_events(self, event_generator: AsyncGenerator[StreamEvent, None], user_input: str) -> Optional[StreamEvent]:
         """
         Display events from a generator until interrupted or complete.
         """
@@ -374,9 +361,7 @@ class StreamingSession:
         use_status = console.is_terminal and sys.stdout.isatty()
         show_live_status = not use_status
         current_status = self._create_status_line("Thinking...") if show_live_status else Text("")
-        status_context = (
-            console.status("[thinking]Thinking...[/thinking]", spinner="dots") if use_status else nullcontext()
-        )
+        status_context = console.status("[thinking]Thinking...[/thinking]", spinner="dots") if use_status else nullcontext()
 
         # Initial print of user input is handled above
         # We rely on Live view to show content and status
@@ -497,9 +482,7 @@ class StreamingSession:
                                     if event.content not in self.streaming_content:
                                         self.streaming_content += event.content
                                         self.current_segment += event.content
-                                        live.update(
-                                            self._create_view(user_input, current_status, show_status=show_live_status)
-                                        )
+                                        live.update(self._create_view(user_input, current_status, show_status=show_live_status))
 
                         elif event.type == "message":
                             run_id = event.metadata.get("run_id", "") if event.metadata else ""
@@ -509,9 +492,7 @@ class StreamingSession:
                             if event.content:
                                 if run_id in self.processed_run_ids:
                                     self.current_segment += event.content[len(self.current_segment) :]
-                                    live.update(
-                                        self._create_view(user_input, current_status, show_status=show_live_status)
-                                    )
+                                    live.update(self._create_view(user_input, current_status, show_status=show_live_status))
 
                         elif event.type == "permission_required":
                             self._flush_segment()
