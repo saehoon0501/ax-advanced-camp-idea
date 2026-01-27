@@ -24,7 +24,6 @@ def _default_tools() -> list[BaseTool]:
     tools = []
     tools.extend(BashTool().get_langchain_tools())
     tools.extend(FileOperationTool().get_langchain_tools())
-    tools.extend(TodoWriteTool().get_langchain_tools())
     return tools
 
 
@@ -37,7 +36,7 @@ def coding_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
     ]
     return AgentSpec(
         name="coding_agent",
-        tools=_default_tools(),
+        tools=_default_tools() + TodoWriteTool().get_langchain_tools(),
         middleware=agent_middleware,
         state_schema=DefaultAgentState,
         system_prompt=CODING_AGENT_SYSTEM_PROMPT,
