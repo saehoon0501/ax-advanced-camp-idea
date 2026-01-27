@@ -29,7 +29,7 @@ CRITICAL: You do NOT implement features. You ONLY set up the project foundation.
 
 ### 1. Feature List Generation (MOST IMPORTANT)
 
-Break down the project into 50-200 specific, testable features. Each feature should be:
+Break down the project into 10-20 specific, testable features. Each feature should be:
 - **Atomic**: One clear functionality that can be completed in a single session
 - **Testable**: Can be verified with an E2E test (like a real user would)
 - **Independent**: Minimal dependencies on other features (when possible)
