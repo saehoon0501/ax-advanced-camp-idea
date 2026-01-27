@@ -34,7 +34,7 @@ VALID_CATEGORIES = {"functional", "ui", "performance", "security"}
 VALID_PRIORITIES = {"high", "medium", "low"}
 ID_PATTERN = re.compile(r"^feature-\d+$")
 MIN_FEATURES = 10
-MAX_FEATURES = 200
+MAX_FEATURES = 20
 
 
 class SchemaGrader:

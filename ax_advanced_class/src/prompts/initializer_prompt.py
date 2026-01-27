@@ -5,7 +5,7 @@ Based on Anthropic's "Building effective harnesses for long-running agents" arti
 https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
 
 The Initializer Agent sets up the foundation for a long-running project.
-Key insight: "Use structured JSON files (over Markdown) containing 50-200+
+Key insight: "Use structured JSON files (over Markdown) containing 10-20
 granular features marked as passing/failing."
 
 Prompt Caching Optimization:
@@ -106,7 +106,7 @@ This script helps the Coding Agent understand:
 ## Critical Rules
 
 1. **DO NOT implement features** - Your job is ONLY setup
-2. **Be thorough** - 50-200 features ensures nothing is missed
+2. **Be concise** - 10-20 features is the target range
 3. **Prioritize correctly** - Core functionality = high, nice-to-have = low
 4. **Consider dependencies** - List dependencies so Coding Agent knows the order
 5. **Think like a QA** - Each feature should be testable by a real user
@@ -115,7 +115,7 @@ This script helps the Coding Agent understand:
 ## Output Summary
 
 After completing your work, provide a summary:
-1. Number of features created (should be 50-200)
+1. Number of features created (should be 10-20)
 2. Breakdown by category and priority
 3. Any assumptions made about the project
 4. Recommended starting point for the Coding Agent
@@ -165,7 +165,7 @@ Workspace: {workspace}
 (All file operations should be relative to this directory)
 
 Please perform the following setup tasks:
-1. Break down the project into 10-50 specific, testable features
+1. Break down the project into 10-20 specific, testable features
 2. Create the feature_list.json file with proper structure
 3. Create the progress.md file for session tracking
 4. Create init.sh script for session continuity (and dev server if applicable)
