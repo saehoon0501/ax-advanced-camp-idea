@@ -138,6 +138,7 @@ You have access to tools for file operations and git commands. Use them to creat
 from ax_advanced_class.src.prompts.soft_rules_prompt import (
     SOFT_RULES_PROMPT,
 )
+from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
 
 
 @dynamic_prompt
@@ -158,11 +159,32 @@ def initializer_agent_dynamic_prompt(request: ModelRequest) -> str:
     state = request.state
 
     # Build the dynamic portion (placed at the END for cache optimization)
+    workspace = PermissionConfig().workspace_root
     dynamic_content = f"""
 
 === PROJECT CONTEXT ===
 
+Workspace: {workspace}
+(All file operations should be relative to this directory)
+
 todo_list: {state.get("todo_list", [])}
+
+=== PLANNING & PROGRESS TRACKING ===
+
+CRITICAL: You MUST use the todo_list tool to plan and track your work:
+
+1. **Before Starting**: Break down your work into specific todo items using todo_list tool
+   - Each todo item should be a discrete, completable task
+   - Order items logically based on dependencies
+
+2. **During Execution**: Update todo_list status as you work
+   - Mark current task as "in_progress" BEFORE starting it
+   - Mark task as "completed" IMMEDIATELY after finishing it
+   - Only have ONE task "in_progress" at a time
+
+3. **Progress Indication**: The todo_list provides visibility to the user
+   - Users can see what you're working on and overall progress
+   - Always keep the todo_list synchronized with your actual progress
 
 Please perform the following setup tasks:
 1. Break down the project into 10-50 specific, testable features
