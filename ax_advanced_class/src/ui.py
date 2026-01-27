@@ -594,7 +594,11 @@ def prompt_permission(message: str, context: object | None = None) -> bool:
         )
     )
 
-    user_response = console.input("[prompt]Allow? (yes/no):[/prompt] ").strip().lower()
+    # Use standard input with readline markers to prevent backspace from deleting prompt
+    # \001/\002 = readline non-printing character markers
+    # \x1b[1;91m = Bold Bright Red, \x1b[0m = Reset
+    prompt_str = "\001\x1b[1;91m\002Allow? (yes/no):\001\x1b[0m\002 "
+    user_response = input(prompt_str).strip().lower()
     is_approved = user_response in ("yes", "y", "true", "1")
 
     if is_approved:
