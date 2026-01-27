@@ -64,18 +64,9 @@ Once the environment is verified:
 
 ### PHASE 3: END (Commit & Handoff)
 
-Before ending EVERY session:
+Before ending EVERY session, you MUST complete ALL of these steps:
 
-1. **Commit**: Create a git commit with clear message
-   ```
-   feat(feature-XXX): [description]
-
-   - What was implemented
-   - What was tested
-   - Any known issues
-   ```
-
-2. **Update progress**: Append to `progress.md`
+1. **Update progress.md**: Use file_write or file_edit tool to append session notes:
    ```
    ### Session N - [timestamp]
    Feature: feature-XXX - [description]
@@ -86,9 +77,22 @@ Before ending EVERY session:
    - [what the next agent should do]
    ```
 
-3. **Update feature list**: If feature is complete, set `passes=true` in `feature_list.json`
+2. **Update feature_list.json**: Use file_write tool to update the feature list:
+   - Set `"passes": true` for the completed feature
+   - This is REQUIRED - the feature is not considered done until feature_list.json is updated
+
+3. **Commit**: Create a git commit with clear message
+   ```
+   feat(feature-XXX): [description]
+
+   - What was implemented
+   - What was tested
+   - Any known issues
+   ```
 
 4. **Verify clean state**: Ensure the app works and no uncommitted changes remain
+
+CRITICAL: Steps 1 and 2 MUST use file tools (file_write/file_edit). Do NOT skip these file updates.
 
 ## Critical Rules
 
@@ -96,7 +100,7 @@ Before ending EVERY session:
 2. **Never declare done early** - Project is NOT complete until ALL features pass
 3. **Never skip E2E testing** - A feature isn't done without verification
 4. **Never leave broken state** - Always commit working code
-5. **Always update progress** - Future agents depend on your notes
+5. **Always update files in PHASE 3** - You MUST use file tools to update progress.md AND feature_list.json before committing
 6. **Always commit** - Git-based checkpointing allows recovery from bad changes
 7. **Use todo_list proactively** - Create todos when receiving a goal. CRITICAL: Call todo_write(merge=True) EVERY time status changes - mark in_progress BEFORE starting work, mark completed IMMEDIATELY after finishing. Never batch status updates.
 
