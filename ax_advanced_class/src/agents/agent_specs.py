@@ -28,10 +28,12 @@ def _default_tools() -> list[BaseTool]:
     return tools
 
 
-def coding_agent_spec() -> AgentSpec:
+def coding_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
+    if config is None:
+        config = PermissionConfig()
     agent_middleware = [
         coding_agent_dynamic_prompt,
-        ToolValidationMiddleware(PermissionConfig()),
+        ToolValidationMiddleware(config),
     ]
     return AgentSpec(
         name="coding_agent",
@@ -42,10 +44,12 @@ def coding_agent_spec() -> AgentSpec:
     )
 
 
-def initializer_agent_spec() -> AgentSpec:
+def initializer_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
+    if config is None:
+        config = PermissionConfig()
     agent_middleware = [
         initializer_agent_dynamic_prompt,
-        ToolValidationMiddleware(PermissionConfig()),
+        ToolValidationMiddleware(config),
     ]
     return AgentSpec(
         name="initializer_agent",

@@ -96,6 +96,7 @@ class LongRunningOrchestrator:
         self,
         llm: Any,
         checkpointer: Optional[Any] = None,
+        permission_config: Optional[Any] = None,
     ):
         """
         Initialize the orchestrator.
@@ -103,13 +104,14 @@ class LongRunningOrchestrator:
         Args:
             llm: The language model to use for routing and agents
             checkpointer: Optional LangGraph checkpointer for state persistence
+            permission_config: Optional PermissionConfig for tool validation
         """
         self.llm = llm
         self.checkpointer = checkpointer or MemorySaver()
 
         factory = AgentFactory(self.llm)
-        self.initializer_agent = factory.create(initializer_agent_spec())
-        self.coding_agent = factory.create(coding_agent_spec())
+        self.initializer_agent = factory.create(initializer_agent_spec(permission_config))
+        self.coding_agent = factory.create(coding_agent_spec(permission_config))
 
         # Build the workflow graph
         self.workflow = self._build_workflow()
@@ -334,6 +336,7 @@ class LongRunningOrchestrator:
 def create_orchestrator(
     llm: Any,
     checkpointer: Optional[Any] = None,
+    permission_config: Optional[Any] = None,
 ) -> LongRunningOrchestrator:
     """
     Factory function to create a configured orchestrator.
@@ -341,6 +344,7 @@ def create_orchestrator(
     Args:
         llm: The language model to use for routing and agents
         checkpointer: Optional checkpointer for state persistence
+        permission_config: Optional PermissionConfig for tool validation
 
     Returns:
         Configured LongRunningOrchestrator instance
@@ -348,4 +352,5 @@ def create_orchestrator(
     return LongRunningOrchestrator(
         llm=llm,
         checkpointer=checkpointer,
+        permission_config=permission_config,
     )
