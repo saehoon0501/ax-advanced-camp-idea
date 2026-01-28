@@ -17,10 +17,6 @@ from enum import Enum
 class TodoStatus(str, Enum):
     """Status of a todo item for task tracking."""
 
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-
 
 class TodoItem(TypedDict):
     """
@@ -29,59 +25,11 @@ class TodoItem(TypedDict):
     Based on Claude Code's TodoWrite tool schema.
     """
 
-    id: str  # Unique identifier for the todo
-    content: str  # Imperative form: "Create feature_list.json"
-    activeForm: str  # Present continuous: "Creating feature_list.json"
-    status: TodoStatus  # TodoStatus enum value
-
 
 def merge_todo_list(existing: list[TodoItem], updates: Any) -> list[TodoItem]:
-    """
-    Merge todo list updates with existing todos.
+    """ """
 
-    This reducer handles both replace (merge=False) and merge (merge=True) semantics.
-
-    Args:
-        existing: Current todo list in state
-        updates: Either a list of todos (replace) or a dict with {"todos": [...], "merge": bool}
-
-    Returns:
-        Updated todo list
-    """
-    # Handle dict format from TodoWriteTool: {"todos": [...], "merge": bool}
-    if isinstance(updates, dict) and "todos" in updates:
-        new_todos = updates.get("todos", [])
-        should_merge = updates.get("merge", False)
-    else:
-        # Direct list update (replace semantics)
-        new_todos = updates if isinstance(updates, list) else []
-        should_merge = False
-
-    if not should_merge:
-        # Replace entire list
-        return new_todos
-
-    # Merge semantics: update by ID
-    result = list(existing) if existing else []
-
-    for new_todo in new_todos:
-        todo_id = new_todo.get("id")
-        if not todo_id:
-            continue
-
-        # Find and update existing todo with same ID
-        found = False
-        for i, existing_todo in enumerate(result):
-            if existing_todo.get("id") == todo_id:
-                result[i] = new_todo
-                found = True
-                break
-
-        # Add new todo if not found
-        if not found:
-            result.append(new_todo)
-
-    return result
+    return
 
 
 class DefaultAgentState(TypedDict):
