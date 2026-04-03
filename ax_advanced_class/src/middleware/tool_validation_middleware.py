@@ -5,7 +5,6 @@ Provides validation for all tool calls using LangChain's @wrap_tool_call middlew
 Uses tree-sitter-bash for robust command parsing and security validation.
 """
 
-import fnmatch
 import os
 from typing import Callable, List, Optional
 
@@ -18,6 +17,7 @@ from langgraph.types import Command, interrupt
 from ax_advanced_class.src.config.tool_permission_config import (
     PermissionConfig,
     PermissionLevel,
+    PermissionRule,
     CommandValidationResult,
     MAX_OUTPUT_CHARS,
     DEFAULT_TIMEOUT_MS,
@@ -111,6 +111,8 @@ class _BashValidator:
     def __init__(self, config: PermissionConfig):
         self.config = config
         self._parser = BashParser()
+        self._allow_rules = [PermissionRule.parse(r) for r in config.allow_rules]
+        self._deny_rules = [PermissionRule.parse(r) for r in config.deny_rules]
 
     # =========================================================================
     # Public API
@@ -148,10 +150,10 @@ class _BashValidator:
                     blocked_items=[pattern],
                 )
 
-        # Check pattern rules (DENY patterns first, then ALLOW patterns)
-        pattern_result = self._check_pattern_rules(command)
-        if pattern_result:
-            return pattern_result
+        # Check permission rules (DENY rules first, then ALLOW rules)
+        rule_result = self._check_rules(command)
+        if rule_result:
+            return rule_result
 
         # Parse the command
         parsed_commands = self._parser.parse(command)
@@ -265,29 +267,27 @@ class _BashValidator:
     # Pattern Matching
     # =========================================================================
 
-    def _check_pattern_rules(self, command: str) -> Optional[CommandValidationResult]:
+    def _check_rules(self, command: str) -> Optional[CommandValidationResult]:
         """
-        Check command against pattern-based rules.
+        Check command against PermissionRule-based deny/allow rules.
 
-        Order: DENY patterns → ALLOW patterns
+        Order: DENY rules → ALLOW rules
         """
-        # Check deny patterns first
-        for pattern in self.config.deny_patterns:
-            if fnmatch.fnmatch(command, pattern):
+        for rule in self._deny_rules:
+            if rule.matches("execute", command):
                 return CommandValidationResult(
                     level=PermissionLevel.DENY,
                     command=command,
-                    reason=f"Command matches denied pattern: {pattern}",
-                    blocked_items=[pattern],
+                    reason=f"Command matches deny rule: {rule}",
+                    blocked_items=[str(rule)],
                 )
 
-        # Check allow patterns
-        for pattern in self.config.allow_patterns:
-            if fnmatch.fnmatch(command, pattern):
+        for rule in self._allow_rules:
+            if rule.matches("execute", command):
                 return CommandValidationResult(
                     level=PermissionLevel.ALLOW,
                     command=command,
-                    reason=f"Command matches allowed pattern: {pattern}",
+                    reason=f"Command matches allow rule: {rule}",
                 )
 
         return None
@@ -329,14 +329,15 @@ class _BashValidator:
                     blocked_items=list(pattern),
                 )
 
-        # 1c. Check blocked commands
-        if cmd_name in self.config.blocked_commands:
-            return CommandValidationResult(
-                level=PermissionLevel.DENY,
-                command=parsed.raw_text,
-                reason=f"Command '{cmd_name}' is blocked",
-                blocked_items=[cmd_name],
-            )
+        # 1c. Check deny rules for this command
+        for rule in self._deny_rules:
+            if rule.matches("execute", cmd_name) or rule.matches("execute", parsed.raw_text):
+                return CommandValidationResult(
+                    level=PermissionLevel.DENY,
+                    command=parsed.raw_text,
+                    reason=f"Command matches deny rule: {rule}",
+                    blocked_items=[str(rule)],
+                )
 
         # 1d. Check blocked argument patterns
         pattern_result = self._check_blocked_patterns(parsed)
@@ -373,13 +374,14 @@ class _BashValidator:
         if cmd_name == "git":
             return self._validate_git_command(parsed)
 
-        # 2b. Check allowed commands
-        if cmd_name in self.config.allowed_commands:
-            return CommandValidationResult(
-                level=PermissionLevel.ALLOW,
-                command=parsed.raw_text,
-                reason=f"Command '{cmd_name}' is allowed",
-            )
+        # 2b. Check allow rules for this command
+        for rule in self._allow_rules:
+            if rule.matches("execute", cmd_name) or rule.matches("execute", parsed.raw_text):
+                return CommandValidationResult(
+                    level=PermissionLevel.ALLOW,
+                    command=parsed.raw_text,
+                    reason=f"Command matches allow rule: {rule}",
+                )
 
         # === DEFAULT: ASK ===
         return CommandValidationResult(
@@ -493,6 +495,19 @@ class ToolValidationMiddleware(AgentMiddleware):
         self._config = config
         # Track read files: {normalized_path: modification_time_at_read}
         self._read_files: dict[str, float] = {}
+        # Session-scoped permission rules: Tool(pattern) format
+        self._allow_rules: list[PermissionRule] = []
+
+    def _is_allowed(self, tool_name: str, content: str) -> bool:
+        """Check if any session rule matches this tool call."""
+        return any(rule.matches(tool_name, content) for rule in self._allow_rules)
+
+    def _add_allow_rule(self, tool_name: str, content: str) -> str:
+        """Create a prefix rule from content and add it. Returns the rule string."""
+        prefix = content.split()[0] if content.strip() else content
+        rule = PermissionRule(tool_name=tool_name, pattern=f"{prefix}:*")
+        self._allow_rules.append(rule)
+        return str(rule)
 
     def wrap_tool_call(
         self,
@@ -520,22 +535,30 @@ class ToolValidationMiddleware(AgentMiddleware):
                             status="error",
                         )
 
-                    # ASK level - proceed but could prompt user in future
+                    # ASK level - prompt user unless matched by a session allow rule
                     if result.level == PermissionLevel.ASK:
-                        is_apporved = interrupt(
-                            {
-                                "question": f"Command '{args['command']}' requires confirmation",
-                                "tool_call_id": tool_call_id,
-                                "command": args["command"],
-                                "tool_name": tool_name,
-                            }
-                        )
-                        if not is_apporved:
-                            return ToolMessage(
-                                content=f"Error: Command denied. {result.reason}",
-                                tool_call_id=tool_call_id,
-                                status="error",
+                        command = args["command"]
+                        if not self._is_allowed(tool_name, command):
+                            cmd_prefix = command.split()[0] if command.strip() else command
+                            response = interrupt(
+                                {
+                                    "question": f"Command '{command}' requires confirmation",
+                                    "tool_call_id": tool_call_id,
+                                    "command": command,
+                                    "tool_name": tool_name,
+                                    "allow_rule": f"{tool_name}({cmd_prefix}:*)",
+                                }
                             )
+                            if response == "always":
+                                self._add_allow_rule(tool_name, command)
+                            elif not response or (isinstance(response, str) and response.startswith("deny:")):
+                                feedback = response[5:] if isinstance(response, str) and response.startswith("deny:") else ""
+                                reason = f"User feedback: {feedback}" if feedback else result.reason
+                                return ToolMessage(
+                                    content=f"Error: Command denied. {reason}",
+                                    tool_call_id=tool_call_id,
+                                    status="error",
+                                )
 
             # --- File Tool Validation ---
             elif tool_name in _FILE_TOOL_NAMES:
@@ -566,20 +589,29 @@ class ToolValidationMiddleware(AgentMiddleware):
 
                     # ASK for write operations to external paths
                     if result.level == PermissionLevel.ASK:
-                        is_apporved = interrupt(
-                            {
-                                "question": f"Path '{normalized_path}' requires confirmation",
-                                "tool_call_id": tool_call_id,
-                                "path": normalized_path,
-                                "tool_name": tool_name,
-                            }
-                        )
-                        if not is_apporved:
-                            return ToolMessage(
-                                content=f"Error: Path denied. {result.reason}",
-                                tool_call_id=tool_call_id,
-                                status="error",
+                        if not self._is_allowed(tool_name, normalized_path):
+                            parent_dir = os.path.dirname(normalized_path)
+                            response = interrupt(
+                                {
+                                    "question": f"Path '{normalized_path}' requires confirmation",
+                                    "tool_call_id": tool_call_id,
+                                    "path": normalized_path,
+                                    "tool_name": tool_name,
+                                    "allow_rule": f"{tool_name}({parent_dir}:*)",
+                                }
                             )
+                            if response == "always":
+                                self._allow_rules.append(
+                                    PermissionRule(tool_name=tool_name, pattern=f"{parent_dir}:*")
+                                )
+                            elif not response or (isinstance(response, str) and response.startswith("deny:")):
+                                feedback = response[5:] if isinstance(response, str) and response.startswith("deny:") else ""
+                                reason = f"User feedback: {feedback}" if feedback else result.reason
+                                return ToolMessage(
+                                    content=f"Error: Path denied. {reason}",
+                                    tool_call_id=tool_call_id,
+                                    status="error",
+                                )
 
                     # --- Read-before-write/edit check and stale read detection ---
                     if is_write:

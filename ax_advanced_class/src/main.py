@@ -145,11 +145,11 @@ def main():
 
                 # Handle permission requests with resume loop
                 while final_event and final_event.type == "permission_required":
-                    is_approved = prompt_permission(
+                    response = prompt_permission(
                         final_event.content,
                         final_event.metadata.get("interrupt_data") if final_event.metadata else None,
                     )
-                    resume_generator = service.aresume(is_approved)
+                    resume_generator = service.aresume(response)
                     final_event = await session.display_events(resume_generator, user_input)
 
                 # Print final content and completion message

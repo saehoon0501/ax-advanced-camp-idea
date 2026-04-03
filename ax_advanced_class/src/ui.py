@@ -572,7 +572,23 @@ def _format_permission_prompt(message: str, context: object | None) -> str:
     return f"{message}\n\n" + "\n".join(details)
 
 
-def prompt_permission(message: str, context: object | None = None) -> bool:
+def _read_single_key() -> str:
+    """Read a single keypress without requiring Enter."""
+    import sys
+    import tty
+    import termios
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
+
+def prompt_permission(message: str, context: object | None = None) -> bool | str:
     """
     Display permission dialog and get user approval.
 
@@ -580,31 +596,47 @@ def prompt_permission(message: str, context: object | None = None) -> bool:
         message: The permission request message to display
 
     Returns:
-        True if user approved, False otherwise
+        True if user approved once, "always" if always allowed, "deny:msg" if denied with feedback, False if denied
     """
     console.print()
     prompt_text = _format_permission_prompt(message, context)
+    rule_display = ""
+    if isinstance(context, dict):
+        rule_display = context.get("allow_rule", "")
+    always_label = f"Always allow [dim]{rule_display}[/dim]" if rule_display else "Always allow (this session)"
+    options = (
+        f"[warning]{prompt_text}[/warning]\n\n"
+        "  [bold green]1[/bold green]  Allow once\n"
+        f"  [bold cyan]2[/bold cyan]  {always_label}\n"
+        "  [bold red]3[/bold red]  Deny\n"
+        "  [bold yellow]4[/bold yellow]  Deny with message"
+    )
     console.print(
         Panel(
-            f"[warning]{prompt_text}[/warning]",
+            options,
             title="[bold yellow]Permission Required[/bold yellow]",
             border_style="yellow",
         )
     )
 
-    # Use standard input with readline markers to prevent backspace from deleting prompt
-    # \001/\002 = readline non-printing character markers
-    # \x1b[1;91m = Bold Bright Red, \x1b[0m = Reset
-    prompt_str = "\001\x1b[1;91m\002Allow? (yes/no):\001\x1b[0m\002 "
-    user_response = input(prompt_str).strip().lower()
-    is_approved = user_response in ("yes", "y", "true", "1")
+    console.print("[bold]Select (1/2/3/4):[/bold] ", end="")
+    key = _read_single_key()
+    console.print(key)  # echo the key
 
-    if is_approved:
+    if key == "1":
         console.print("[success]Approved. Resuming...[/success]")
+        return True
+    elif key == "2":
+        console.print("[success]Always allowed for this session. Resuming...[/success]")
+        return "always"
+    elif key == "4":
+        console.print()
+        feedback = input("  Message to agent: ").strip()
+        console.print("[error]Denied with feedback. Continuing...[/error]")
+        return f"deny:{feedback}" if feedback else False
     else:
         console.print("[error]Denied. Continuing with error...[/error]")
-
-    return is_approved
+        return False
 
 
 def print_session_complete():

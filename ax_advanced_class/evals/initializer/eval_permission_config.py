@@ -16,7 +16,7 @@ def create_eval_permission_config(workspace_root: str) -> PermissionConfig:
 
     Key differences from default config:
     - workspace_root set to test workspace
-    - git commands added to blocked_commands (DENY instead of ASK)
+    - git commands added to deny_rules (DENY instead of ASK)
     - This ensures no interrupt() calls during testing
 
     Args:
@@ -25,23 +25,12 @@ def create_eval_permission_config(workspace_root: str) -> PermissionConfig:
     Returns:
         PermissionConfig configured for eval
     """
-    # Start with default blocked commands
-    default_blocked = {
-        "cd",
-        "mkfs", "fdisk", "dd", "mount", "umount",
-        "shutdown", "reboot", "init", "systemctl", "service",
-        "sudo", "su",
-    }
+    default = PermissionConfig()
 
-    # Add git commands to blocked list (DENY instead of ASK)
-    # This prevents interrupt() from being called during tests
-    git_commands_to_block = {
-        "git",  # Block all git commands
-    }
-
-    blocked_commands = frozenset(default_blocked | git_commands_to_block)
+    # Add git to deny rules (DENY instead of ASK during tests)
+    extra_deny = ["execute(git:*)"]
 
     return PermissionConfig(
         workspace_root=workspace_root,
-        blocked_commands=blocked_commands,
+        deny_rules=default.deny_rules + extra_deny,
     )

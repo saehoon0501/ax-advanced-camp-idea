@@ -78,12 +78,12 @@ class AgentStreamingService:
         ):
             yield event
 
-    async def aresume(self, approved: bool) -> AsyncGenerator[StreamEvent, None]:
+    async def aresume(self, approved: bool | str) -> AsyncGenerator[StreamEvent, None]:
         """
         Resume from an interrupt with user's approval decision.
 
         Args:
-            approved: Whether the user approved the action
+            approved: True (allow once), "always" (always allow), "deny:msg" (deny with feedback), or False (deny)
 
         Yields:
             StreamEvent objects for the UI to display
@@ -94,7 +94,7 @@ class AgentStreamingService:
     async def _arun_stream(
         self,
         user_message: Optional[str] = None,
-        resume_value: Optional[bool] = None,
+        resume_value: Optional[bool | str] = None,
         message_history: Optional[list] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Internal method that handles streaming and interrupt detection."""

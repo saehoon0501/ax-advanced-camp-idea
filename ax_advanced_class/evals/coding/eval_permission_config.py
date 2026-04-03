@@ -26,61 +26,34 @@ def create_eval_permission_config(workspace_root: str) -> PermissionConfig:
     Returns:
         PermissionConfig configured for coding agent eval
     """
-    default_blocked = {
-        "cd",
-        "mkfs", "fdisk", "dd", "mount", "umount",
-        "shutdown", "reboot", "init", "systemctl", "service",
-        "sudo", "su",
-    }
+    default = PermissionConfig()
 
-    # Additional allowed commands for coding agent eval
-    eval_allowed_commands = frozenset({
-        # Default safe commands
-        "ls", "pwd", "echo", "wc", "sort", "uniq", "diff", "file",
-        "which", "whereis", "man", "help", "type", "alias",
-        "env", "printenv", "date", "cal", "whoami", "id", "uname", "hostname",
-        # Coding agent specific
-        "chmod",
-        "cat",
-        "mkdir",
-        "touch",
-        "cp",
-        "mv",
-        "rm",
-        "python",
-        "python3",
-        "pip",
-        "node",
-        "npm",
-    })
-
-    # Allow patterns for coding agent eval
-    eval_allow_patterns = [
-        # Default patterns
-        "npm run *",
-        "npm test*",
-        "yarn *",
-        "uv *",
-        "python -m pytest*",
-        "pytest *",
-        # Coding agent specific - init.sh execution
-        "./init.sh",
-        "./init.sh *",
-        "bash init.sh",
-        "bash ./init.sh",
-        "sh init.sh",
-        "sh ./init.sh",
-        "chmod +x init.sh*",
-        "chmod +x ./init.sh*",
-        "chmod * init.sh*",
-        # Python execution
-        "python *.py",
-        "python3 *.py",
+    # Coding agent needs many more commands allowed
+    extra_allow = [
+        # Coding agent specific commands
+        "execute(chmod:*)",
+        "execute(cat:*)",
+        "execute(mkdir:*)",
+        "execute(touch:*)",
+        "execute(cp:*)",
+        "execute(mv:*)",
+        "execute(rm:*)",
+        "execute(python:*)",
+        "execute(python3:*)",
+        "execute(pip:*)",
+        "execute(node:*)",
+        "execute(npm:*)",
+        # Git operations
+        "execute(git:*)",
+        # init.sh execution
+        "execute(./init.sh*)",
+        "execute(bash init.sh*)",
+        "execute(bash ./init.sh*)",
+        "execute(sh init.sh*)",
+        "execute(sh ./init.sh*)",
     ]
 
     return PermissionConfig(
         workspace_root=workspace_root,
-        blocked_commands=frozenset(default_blocked),
-        allowed_commands=eval_allowed_commands,
-        allow_patterns=eval_allow_patterns,
+        allow_rules=default.allow_rules + extra_allow,
     )

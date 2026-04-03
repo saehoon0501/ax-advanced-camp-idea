@@ -5,6 +5,7 @@ Defines the configuration and error classes for permission management.
 Supports tree-sitter based command parsing and validation.
 """
 
+import fnmatch as _fnmatch
 import os
 from enum import Enum
 from dataclasses import dataclass, field
@@ -63,6 +64,50 @@ class CommandValidationResult:
 
 
 @dataclass
+class PermissionRule:
+    """
+    A permission rule following Claude Code's Tool(pattern) format.
+
+    Supports:
+    - Wildcard: "*" matches everything
+    - Prefix:   "npm:*" matches commands starting with "npm"
+    - Glob:     "npm run *" matches via fnmatch
+    - Exact:    "npm test" matches only "npm test"
+    """
+
+    tool_name: str
+    pattern: str
+
+    @staticmethod
+    def parse(rule_str: str) -> "PermissionRule":
+        """Parse 'execute(npm:*)' → PermissionRule(tool_name='execute', pattern='npm:*')"""
+        if "(" in rule_str and rule_str.endswith(")"):
+            paren_idx = rule_str.index("(")
+            tool_name = rule_str[:paren_idx]
+            pattern = rule_str[paren_idx + 1 : -1]
+        else:
+            tool_name = rule_str
+            pattern = "*"
+        return PermissionRule(tool_name=tool_name, pattern=pattern)
+
+    def matches(self, tool_name: str, content: str) -> bool:
+        """Check if this rule matches a tool call."""
+        if self.tool_name != tool_name:
+            return False
+        if self.pattern == "*":
+            return True
+        if self.pattern.endswith(":*"):
+            prefix = self.pattern[:-2]
+            return content == prefix or content.startswith(prefix + " ") or content.startswith(prefix + "/")
+        if "*" in self.pattern:
+            return _fnmatch.fnmatch(content, self.pattern)
+        return content == self.pattern
+
+    def __str__(self) -> str:
+        return f"{self.tool_name}({self.pattern})"
+
+
+@dataclass
 class PermissionConfig:
     """
     Configuration for permission control.
@@ -76,8 +121,8 @@ class PermissionConfig:
         workspace_root: The root directory for allowed file operations
         allowed_paths: Additional paths allowed outside workspace
         blocked_paths: Paths that are always blocked (e.g., system dirs)
-        blocked_commands: Command names that are DENIED
-        allowed_commands: Command names that are ALLOWED
+        deny_rules: PermissionRule strings for commands that are DENIED
+        allow_rules: PermissionRule strings for commands that are ALLOWED
         blocked_argument_patterns: Dangerous argument combinations → DENY
         allowed_git_subcommands: Git subcommands that are ALLOWED
     """
@@ -105,60 +150,69 @@ class PermissionConfig:
         ]
     )
 
-    # Commands that are DENIED (hard-blocked)
-    # Note: File operation commands (cat, grep, find, sed, awk) are NOT blocked here.
-    # They are "soft-blocked" via the prompt, which discourages their use and
-    # recommends specialized file tools (Read, Grep, Glob, Edit) instead.
-    blocked_commands: FrozenSet[str] = field(
-        default_factory=lambda: frozenset(
-            {
-                "cd",
-                # System destruction / control
-                "mkfs",
-                "fdisk",
-                "dd",
-                "mount",
-                "umount",
-                "shutdown",
-                "reboot",
-                "init",
-                "systemctl",
-                "service",
-                # Privilege escalation
-                "sudo",
-                "su",
-            }
-        )
+    # Deny rules: commands that are hard-blocked.
+    # Format: "execute(command:*)" for prefix match, "execute(pattern *)" for glob.
+    deny_rules: List[str] = field(
+        default_factory=lambda: [
+            "execute(cd:*)",
+            # System destruction / control
+            "execute(mkfs:*)",
+            "execute(fdisk:*)",
+            "execute(dd:*)",
+            "execute(mount:*)",
+            "execute(umount:*)",
+            "execute(shutdown:*)",
+            "execute(reboot:*)",
+            "execute(init:*)",
+            "execute(systemctl:*)",
+            "execute(service:*)",
+            # Privilege escalation
+            "execute(sudo:*)",
+            "execute(su:*)",
+            # Dangerous piped commands
+            "execute(curl * | bash)",
+            "execute(curl * | sh)",
+            "execute(curl * | /bin/bash)",
+            "execute(curl * | /bin/sh)",
+            "execute(wget * | bash)",
+            "execute(wget * | sh)",
+        ]
     )
 
-    # Commands that are ALLOWED (safe operations)
-    allowed_commands: FrozenSet[str] = field(
-        default_factory=lambda: frozenset(
-            {
-                "ls",
-                "pwd",
-                "echo",
-                "wc",
-                "sort",
-                "uniq",
-                "diff",
-                "file",
-                "which",
-                "whereis",
-                "man",
-                "help",
-                "type",
-                "alias",
-                "env",
-                "printenv",
-                "date",
-                "cal",
-                "whoami",
-                "id",
-                "uname",
-                "hostname",
-            }
-        )
+    # Allow rules: commands that are safe to run without prompting.
+    # Format: "execute(command:*)" for prefix match, "execute(pattern *)" for glob.
+    allow_rules: List[str] = field(
+        default_factory=lambda: [
+            "execute(ls:*)",
+            "execute(pwd:*)",
+            "execute(echo:*)",
+            "execute(wc:*)",
+            "execute(sort:*)",
+            "execute(uniq:*)",
+            "execute(diff:*)",
+            "execute(file:*)",
+            "execute(which:*)",
+            "execute(whereis:*)",
+            "execute(man:*)",
+            "execute(help:*)",
+            "execute(type:*)",
+            "execute(alias:*)",
+            "execute(env:*)",
+            "execute(printenv:*)",
+            "execute(date:*)",
+            "execute(cal:*)",
+            "execute(whoami:*)",
+            "execute(id:*)",
+            "execute(uname:*)",
+            "execute(hostname:*)",
+            # Pattern-based allow rules
+            "execute(npm run *)",
+            "execute(npm test*)",
+            "execute(yarn *)",
+            "execute(uv *)",
+            "execute(python -m pytest*)",
+            "execute(pytest *)",
+        ]
     )
 
     # Git subcommands that are ALLOWED
@@ -271,29 +325,6 @@ class PermissionConfig:
             "python": {frozenset({"-i"})},
             "node": {frozenset({"-i"})},
         }
-    )
-
-    # Pattern rules for ALLOW (command patterns with wildcards)
-    # Format: "command arg_pattern" where * is wildcard
-    allow_patterns: List[str] = field(
-        default_factory=lambda: [
-            "npm run *",
-            "npm test*",
-            "yarn *",
-            "uv *",
-            "python -m pytest*",
-            "pytest *",
-        ]
-    )
-
-    # Pattern rules for DENY (command patterns with wildcards)
-    deny_patterns: List[str] = field(
-        default_factory=lambda: [
-            "curl * | bash",
-            "curl * | sh",
-            "wget * | bash",
-            "wget * | sh",
-        ]
     )
 
     def __post_init__(self):
