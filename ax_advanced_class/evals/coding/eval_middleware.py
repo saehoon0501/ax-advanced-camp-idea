@@ -16,8 +16,10 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.tools.tool_node import ToolCallRequest
 from langgraph.types import Command
 
-from ax_advanced_class.src.tools.bash_tool import BashTool
 from ax_advanced_class.src.utils.bash_parser import BashParser, ParsedCommand
+
+# Tool name constant matching deepagents FilesystemMiddleware + LocalShellBackend
+_BASH_TOOL_NAMES = ("execute",)
 
 
 # Hard limits
@@ -130,7 +132,7 @@ class EvalToolValidationMiddleware(AgentMiddleware):
 
         try:
             # Only validate bash commands
-            if tool_name in BashTool.get_tool_names() and "command" in args:
+            if tool_name in _BASH_TOOL_NAMES and "command" in args:
                 command = args["command"]
 
                 # Validate command

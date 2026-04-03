@@ -53,11 +53,6 @@ sys.unraisablehook = _handle_unraisable
 
 from ax_advanced_class.src.orchestrator import create_orchestrator
 from ax_advanced_class.src.llm.bedrock_client import BedrockClient, LLMConfig
-from ax_advanced_class.src.tools import (
-    FileOperationTool,
-    BashTool,
-)
-from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
 from ax_advanced_class.src.ui import (
     console,
     print_welcome,
@@ -77,24 +72,6 @@ def create_llm(model_id: Optional[str] = None):
         config = LLMConfig(model_id=model_id)
     client = BedrockClient(config=config)
     return client.get_core()
-
-
-def create_tools(
-    workspace_path: str = "./workspace",
-) -> list:
-    """Create tools for the agents with permission control."""
-    config = PermissionConfig(
-        workspace_root=os.path.abspath(workspace_path),
-    )
-
-    file_tool = FileOperationTool()
-    bash_tool = BashTool(config=config)
-
-    tools = []
-    tools.extend(file_tool.get_langchain_tools())
-    tools.extend(bash_tool.get_langchain_tools())
-
-    return tools
 
 
 def main():

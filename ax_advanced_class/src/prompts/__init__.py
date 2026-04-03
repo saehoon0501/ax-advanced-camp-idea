@@ -2,6 +2,7 @@
 Prompts Module
 
 Contains all system prompts for the orchestrator and agents.
+Tool selection, file operation, and todo tracking rules are in their respective middleware.
 """
 
 from ax_advanced_class.src.prompts.initializer_prompt import (
@@ -17,14 +18,11 @@ from ax_advanced_class.src.prompts.orchestrator_prompt import (
 )
 from ax_advanced_class.src.prompts.soft_rules_prompt import (
     SOFT_RULES_PROMPT,
-    TOOL_SELECTION_RULES,
     WORKING_DIRECTORY_RULES,
     GIT_SAFETY_RULES,
     PR_CREATION_RULES,
-    FILE_OPERATION_RULES,
     COMMAND_EXECUTION_RULES,
     TASK_TOOL_RULES,
-    TODO_TRACKING_RULES,
     CODE_QUALITY_RULES,
     TONE_AND_STYLE_RULES,
     SECURITY_GUIDELINES,
@@ -39,16 +37,13 @@ __all__ = [
     # Dynamic Prompt Middleware
     "initializer_agent_dynamic_prompt",
     "coding_agent_dynamic_prompt",
-    # Soft Rules Prompts
+    # Soft Rules Prompts (tool/file/todo rules moved to middleware)
     "SOFT_RULES_PROMPT",
-    "TOOL_SELECTION_RULES",
     "WORKING_DIRECTORY_RULES",
     "GIT_SAFETY_RULES",
     "PR_CREATION_RULES",
-    "FILE_OPERATION_RULES",
     "COMMAND_EXECUTION_RULES",
     "TASK_TOOL_RULES",
-    "TODO_TRACKING_RULES",
     "CODE_QUALITY_RULES",
     "TONE_AND_STYLE_RULES",
     "SECURITY_GUIDELINES",

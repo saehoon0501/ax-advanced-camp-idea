@@ -142,7 +142,7 @@ class SessionLifecycleGrader:
             args = tc.get("args", {})
 
             # Check for bash commands
-            if name == "bash":
+            if name in ("bash", "execute"):
                 command = args.get("command", "")
                 if "pwd" in command:
                     checks["pwd_executed"] = True
@@ -204,7 +204,7 @@ class SessionLifecycleGrader:
 
         for i, tc in enumerate(tool_calls):
             name = tc.get("name", "")
-            if name == "todo_write":
+            if name in ("todo_write", "write_todos"):
                 todo_write_calls.append(tc)
                 todo_write_indices.append(i)
 
@@ -282,13 +282,13 @@ class SessionLifecycleGrader:
             args = tc.get("args", {})
 
             # Check for git commit
-            if name == "bash":
+            if name in ("bash", "execute"):
                 command = args.get("command", "")
                 if "git commit" in command:
                     checks["git_commit"] = True
 
             # Check for file writes/edits
-            if name in ("write_file", "file_write", "write", "edit", "file_edit"):
+            if name in ("write_file", "file_write", "write", "edit", "edit_file", "file_edit"):
                 file_path = (
                     args.get("validated_path", "")
                     or args.get("file_path", "")

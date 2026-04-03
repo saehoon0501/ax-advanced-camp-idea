@@ -23,9 +23,12 @@ from ax_advanced_class.src.config.tool_permission_config import (
     DEFAULT_TIMEOUT_MS,
     MAX_TIMEOUT_MS,
 )
-from ax_advanced_class.src.tools.bash_tool import BashTool
-from ax_advanced_class.src.tools.file_tool import FileOperationTool
 from ax_advanced_class.src.utils.bash_parser import BashParser, ParsedCommand
+
+# Tool name constants matching deepagents FilesystemMiddleware + LocalShellBackend
+_BASH_TOOL_NAMES = ("execute",)
+_FILE_TOOL_NAMES = ("read_file", "write_file", "edit_file", "glob", "grep", "ls")
+_WRITE_FILE_TOOLS = ("write_file", "edit_file")
 
 
 class _BashValidator:
@@ -503,7 +506,7 @@ class ToolValidationMiddleware(AgentMiddleware):
 
         try:
             # --- Bash Tool Validation ---
-            if tool_name in BashTool.get_tool_names():
+            if tool_name in _BASH_TOOL_NAMES:
                 # Enforce timeout limits (hard limit)
                 self._enforce_timeout_limits(args)
 
@@ -535,10 +538,10 @@ class ToolValidationMiddleware(AgentMiddleware):
                             )
 
             # --- File Tool Validation ---
-            elif tool_name in FileOperationTool.get_tool_names():
-                if "path" in args or "validated_path" in args:
-                    # Handle both 'path' and 'validated_path' parameter names
-                    path_key = "validated_path" if "validated_path" in args else "path"
+            elif tool_name in _FILE_TOOL_NAMES:
+                if "file_path" in args or "path" in args or "validated_path" in args:
+                    # Handle 'file_path' (FilesystemMiddleware), 'path', and 'validated_path' parameter names
+                    path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
                     path = args[path_key]
 
                     if not os.path.isabs(path):
@@ -550,7 +553,7 @@ class ToolValidationMiddleware(AgentMiddleware):
                     # Determine if this is a read or write operation
                     # read, grep, glob → read operations
                     # write, edit → write operations
-                    is_write = tool_name in ("write", "edit")
+                    is_write = tool_name in _WRITE_FILE_TOOLS
 
                     result = self._validator.validate_path(path, is_write=is_write)
 
@@ -585,9 +588,9 @@ class ToolValidationMiddleware(AgentMiddleware):
                         if file_exists:
                             # Check if file was read first
                             if normalized_path not in self._read_files:
-                                operation = "writing to" if tool_name == "write" else "editing"
+                                operation = "writing to" if tool_name == "write_file" else "editing"
                                 return ToolMessage(
-                                    content=f"Error: You must read the file first before {operation} it. Use the Read tool first.",
+                                    content=f"Error: You must read the file first before {operation} it. Use the read_file tool first.",
                                     tool_call_id=tool_call_id,
                                     status="error",
                                 )
@@ -597,7 +600,7 @@ class ToolValidationMiddleware(AgentMiddleware):
                                 current_mtime = os.path.getmtime(normalized_path)
                                 read_mtime = self._read_files[normalized_path]
                                 if current_mtime > read_mtime:
-                                    operation = "writing to" if tool_name == "write" else "editing"
+                                    operation = "writing to" if tool_name == "write_file" else "editing"
                                     return ToolMessage(
                                         content=f"Error: File has been modified since you last read it. Please read the file again before {operation} it.",
                                         tool_call_id=tool_call_id,
@@ -613,11 +616,11 @@ class ToolValidationMiddleware(AgentMiddleware):
             handler_result = handler(request)
 
             # --- Track reads after successful read operations ---
-            if tool_name == "read":
+            if tool_name == "read_file":
                 if isinstance(handler_result, ToolMessage) and handler_result.status != "error":
                     # Track the read
-                    if "path" in args or "validated_path" in args:
-                        path_key = "validated_path" if "validated_path" in args else "path"
+                    if "file_path" in args or "path" in args or "validated_path" in args:
+                        path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
                         normalized_path = self._validator.get_normalized_path(args[path_key])
                         try:
                             mtime = os.path.getmtime(normalized_path)
@@ -626,11 +629,11 @@ class ToolValidationMiddleware(AgentMiddleware):
                             pass  # File might not exist
 
             # --- Update tracking after successful write/edit ---
-            if tool_name in ("write", "edit"):
+            if tool_name in _WRITE_FILE_TOOLS:
                 if isinstance(handler_result, ToolMessage) and handler_result.status != "error":
                     # Update the tracked mtime after successful write/edit
-                    if "path" in args or "validated_path" in args:
-                        path_key = "validated_path" if "validated_path" in args else "path"
+                    if "file_path" in args or "path" in args or "validated_path" in args:
+                        path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
                         normalized_path = self._validator.get_normalized_path(args[path_key])
                         try:
                             self._read_files[normalized_path] = os.path.getmtime(normalized_path)

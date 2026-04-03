@@ -160,10 +160,32 @@ class LongRunningOrchestrator:
         Uses structured output from the LLM to make routing decisions.
         All complex logic is delegated to the specialized agents.
         """
+        messages = state.get("messages", [])
+
+        structured_llm = self.llm.with_structured_output(RouterDecision)
+        decision: RouterDecision = structured_llm.invoke(
+            [
+                {"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT},
+                *messages,
+            ]
+        )
+
+        route_map = {
+            "initializer": AgentRoute.INITIALIZER,
+            "coding": AgentRoute.CODING,
+            "finish": AgentRoute.FINISH,
+        }
+
+        route = route_map.get(decision.route, AgentRoute.FINISH)
+
+        if decision.response:
+            message_content = decision.response
+        else:
+            message_content = f"Routing to {decision.route}: {decision.reason}"
 
         return {
-            # "next_agent":
-            # "messages": [],
+            "next_agent": route,
+            "messages": [AIMessage(content=message_content)],
         }
 
     def _route_decision(self, state: OrchestratorState) -> AgentRoute:
@@ -179,7 +201,7 @@ class LongRunningOrchestrator:
                 "messages": state.get("messages", []),
             }
         )
-        return {"messages": []}
+        return {"messages": [AIMessage(content=result["messages"][-1].content)]}
 
     def _coding_node(self, state: OrchestratorState) -> dict:
         """
@@ -188,10 +210,10 @@ class LongRunningOrchestrator:
         result = self.coding_agent.invoke(
             {
                 "messages": state.get("messages", []),
-                "todo_list": [],
+                "todos": [],
             }
         )
-        return {"messages": []}
+        return {"messages": [AIMessage(content=result["messages"][-1].content)]}
 
     def invoke(
         self,

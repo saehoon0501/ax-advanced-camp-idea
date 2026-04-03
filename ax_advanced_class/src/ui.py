@@ -205,7 +205,7 @@ def print_status(orchestrator: LongRunningOrchestrator, config: dict, workspace:
 def _get_tool_icon(tool_name: str) -> str:
     """Get the appropriate icon for a tool."""
     tool_lower = tool_name.lower()
-    if "bash" in tool_lower:
+    if "bash" in tool_lower or tool_lower == "execute":
         return ICONS["bash"]
     elif "read" in tool_lower:
         return ICONS["file_read"]
@@ -220,25 +220,23 @@ def _format_tool_input(tool_name: str, tool_input: dict) -> str:
     """Format tool input for display."""
     tool_lower = tool_name.lower()
 
-    if "bash" in tool_lower:
+    if "bash" in tool_lower or tool_lower == "execute":
         cmd = tool_input.get("command", "")
         if len(cmd) > 60:
             cmd = cmd[:57] + "..."
         return f"$ {cmd}"
     elif "read" in tool_lower:
-        path = tool_input.get("validated_path", tool_input.get("path", ""))
+        path = tool_input.get("file_path", tool_input.get("validated_path", tool_input.get("path", "")))
         # Shorten path for display
         if len(path) > 60:
             path = "..." + path[-57:]
         return path
-    elif tool_lower == "todo_write":
+    elif tool_lower in ("todo_write", "write_todos"):
         # Show count of todos being updated
         todos = tool_input.get("todos", [])
-        merge = tool_input.get("merge", False)
-        action = "Updating" if merge else "Setting"
-        return f"{action} {len(todos)} task(s)"
+        return f"Setting {len(todos)} task(s)"
     elif "write" in tool_lower:
-        path = tool_input.get("validated_path", tool_input.get("path", ""))
+        path = tool_input.get("file_path", tool_input.get("validated_path", tool_input.get("path", "")))
         if len(path) > 60:
             path = "..." + path[-57:]
         content_len = len(tool_input.get("content", ""))

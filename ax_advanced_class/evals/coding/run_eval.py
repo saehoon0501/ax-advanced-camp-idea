@@ -277,9 +277,11 @@ def _run_agent(
     from langgraph.errors import GraphInterrupt
     from langchain.agents import create_agent
 
+    from deepagents.backends import LocalShellBackend
+    from ax_advanced_class.src.middleware.filesystem_middleware import FilesystemMiddleware
+    from ax_advanced_class.src.middleware.todo_middleware import TodoListMiddleware
+
     from ax_advanced_class.src.llm.bedrock_client import BedrockClient
-    from ax_advanced_class.src.agents.agent_factory import DefaultAgentState
-    from ax_advanced_class.src.tools import BashTool, FileOperationTool, TodoWriteTool
     from ax_advanced_class.src.prompts import coding_agent_dynamic_prompt
     from ax_advanced_class.evals.coding.eval_middleware import EvalToolValidationMiddleware
 
@@ -287,13 +289,8 @@ def _run_agent(
     workspace_dir = Path(workspace_dir).resolve()
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create tools
-    tools = []
-    tools.extend(BashTool().get_langchain_tools())
-    tools.extend(FileOperationTool().get_langchain_tools())
-    tools.extend(TodoWriteTool().get_langchain_tools())
-
-    # Create minimal middleware for eval (only blocks dangerous commands, no ASK)
+    # Create middleware stack (tools provided by FilesystemMiddleware + TodoListMiddleware)
+    backend = LocalShellBackend(root_dir=str(workspace_dir), inherit_env=True)
     eval_middleware = EvalToolValidationMiddleware()
 
     # Create coding agent with eval middleware
@@ -301,10 +298,13 @@ def _run_agent(
 
     agent = create_agent(
         model=llm,
-        tools=tools,
-        middleware=[eval_middleware, coding_agent_dynamic_prompt],
+        middleware=[
+            eval_middleware,
+            coding_agent_dynamic_prompt,
+            FilesystemMiddleware(backend=backend),
+            TodoListMiddleware(),
+        ],
         name="coding_agent",
-        state_schema=DefaultAgentState,
         checkpointer=MemorySaver(),
     )
     agent = agent.with_config({"recursion_limit": 500})
@@ -317,7 +317,7 @@ def _run_agent(
 
     try:
         result = agent.invoke(
-            {"messages": [HumanMessage(content=prompt)], "todo_list": []},
+            {"messages": [HumanMessage(content=prompt)], "todos": []},
             config=config,
         )
     except GraphInterrupt as e:
