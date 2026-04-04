@@ -41,7 +41,6 @@ def coding_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
     if config is None:
         config = PermissionConfig()
     agent_middleware = [
-        coding_agent_dynamic_prompt,
         ToolValidationMiddleware(config),
         _create_filesystem_middleware(config),
         TodoListMiddleware(),
@@ -50,6 +49,7 @@ def coding_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
             trigger=("tokens", 60000),
             keep=("messages", 20),
         ),
+        coding_agent_dynamic_prompt,
     ]
     return AgentSpec(
         name="coding_agent",
@@ -62,7 +62,6 @@ def initializer_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
     if config is None:
         config = PermissionConfig()
     agent_middleware = [
-        initializer_agent_dynamic_prompt,
         ToolValidationMiddleware(config),
         _create_filesystem_middleware(config),
         SummarizationMiddleware(
@@ -70,6 +69,7 @@ def initializer_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
             trigger=("tokens", 60000),
             keep=("messages", 20),
         ),
+        initializer_agent_dynamic_prompt,
     ]
     return AgentSpec(
         name="initializer_agent",
