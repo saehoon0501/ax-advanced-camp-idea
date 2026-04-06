@@ -1,21 +1,21 @@
 """
-Coding Agent System Prompt
-
-Based on Anthropic's "Building effective harnesses for long-running agents" article.
-https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
-
-The Coding Agent works incrementally on the project, one feature at a time.
-Key insight: "Structure prompts to work on single features within each context
-window, leaving the environment in a clean state."
+Coding Agent System Prompt + Dynamic Prompt Middleware
 
 Prompt Caching Optimization:
-- Static content is placed FIRST (cacheable prefix)
+- Static content (CODING_AGENT_SYSTEM_PROMPT) is placed FIRST (cacheable prefix)
 - Dynamic content from @dynamic_prompt is appended LAST
 - This maximizes cache hits since the prompt prefix remains constant across calls
 """
 
 from langchain.agents.middleware import dynamic_prompt, ModelRequest
 
+from ax_advanced_class.src.prompts.soft_rules_prompt import SOFT_RULES_PROMPT
+from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
+
+
+# =============================================================================
+# Static System Prompt — 이 부분은 매 호출마다 동일하여 Prompt Cache 대상입니다
+# =============================================================================
 
 CODING_AGENT_SYSTEM_PROMPT = """You are a Coding Agent working incrementally on a long-running project.
 
@@ -107,20 +107,13 @@ CRITICAL: Steps 1 and 2 MUST use file tools (write_file/edit_file). Do NOT skip 
 ## Handling Problems
 
 ### If tests fail:
-- Debug the issue
-- Fix the code
-- Re-run tests
-- Only proceed when passing
+- Debug the issue, fix the code, re-run tests. Only proceed when passing.
 
 ### If blocked on dependencies:
-- Document the blocker in progress file
-- Select a different feature if possible
-- Leave clear notes for next session
+- Document the blocker in progress file. Select a different feature if possible.
 
 ### If app is in broken state:
-- Check git log for recent changes
-- Consider `git revert` if needed to get back to working baseline
-- Fix before implementing new features
+- Check git log for recent changes. Consider `git revert` if needed.
 
 ## Output Summary
 
@@ -135,62 +128,45 @@ You have access to tools for file operations, git commands, and shell execution.
 
 
 # =============================================================================
-# Dynamic Prompt Middleware
+# Dynamic Prompt Middleware — 매 LLM 호출마다 현재 상태를 프롬프트에 주입합니다
 # =============================================================================
-#
-# Uses LangChain's @dynamic_prompt decorator for context-aware prompt generation.
-#
-# Prompt Caching Optimization:
-# - Static content (CODING_AGENT_SYSTEM_PROMPT) is placed FIRST so it can be cached
-# - Dynamic content (feature info, session info) is appended LAST via middleware
-# - This maximizes cache hits since the prompt prefix remains constant across calls
-#
-# Runtime Context Keys (set via agent.invoke config):
-# - feature_id: str
-# - feature_description: str
-# - feature_category: str
-# - feature_priority: str
-# - feature_steps: list[str]
-# - feature_dependencies: list[str]
-# - session_number: int
-# - repository_path: str
-
-
-from ax_advanced_class.src.prompts.soft_rules_prompt import (
-    SOFT_RULES_PROMPT,
-)
-from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
 
 
 @dynamic_prompt
 def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
+    """Dynamic prompt middleware for the Coding Agent.
+
+    매 LLM 호출 시 request.state에서 현재 상태를 읽어 프롬프트에 주입합니다.
+    정적 부분(CODING_AGENT_SYSTEM_PROMPT)은 앞에, 동적 부분은 뒤에 배치하여
+    Prompt Caching 효율을 최대화합니다.
     """
-    Dynamic prompt middleware for the Coding Agent.
-
-    This middleware appends session-specific context to the static system prompt.
-    The static prompt is cached, while dynamic context varies per invocation.
-
-    Args:
-        request: ModelRequest containing runtime context with feature/session info
-
-    Returns:
-        Complete prompt string with static content first, dynamic content last
-    """
-    # Extract dynamic context from runtime (set via invoke config)
     state = request.state
-
-    # Build the dynamic portion (placed at the END for cache optimization)
     workspace = PermissionConfig().workspace_root
+
+    # TODO 1: 동적 컨텍스트를 구성하세요
+    #
+    # 포함해야 할 정보:
+    #   1. Workspace 경로 — Agent가 파일 작업할 때 기준 디렉토리
+    #      힌트: workspace 변수 사용
+    #
+    #   2. 현재 todos 상태 — Agent가 진행 중인 작업 목록
+    #      힌트: state.get("todos", [])
+    #
+    #   3. write_todos 사용 가이드
+    #      - 작업 시작 전 todo 생성
+    #      - in_progress는 1개만
+    #      - 완료 즉시 상태 업데이트
+    #
     dynamic_content = f"""
 
-=== CURRENT SESSION CONTEXT ===
+# CURRENT SESSION CONTEXT
 
 Workspace: {workspace}
 (All file operations should be relative to this directory)
 
 todos: {state.get("todos", [])}
 
-=== PLANNING & PROGRESS TRACKING ===
+# PLANNING & PROGRESS TRACKING
 
 CRITICAL: You MUST use the write_todos tool to plan and track your work:
 
@@ -209,5 +185,4 @@ CRITICAL: You MUST use the write_todos tool to plan and track your work:
 
 Start your session by following PHASE 1 (Recovery & Orientation) as described above."""
 
-    # Return: static system prompt (cacheable) + soft rules + dynamic content (at the end)
     return CODING_AGENT_SYSTEM_PROMPT + SOFT_RULES_PROMPT + dynamic_content

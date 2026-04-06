@@ -1,0 +1,125 @@
+# Context Engineering: From LLMs to AI Agents — The Expanding Scope of Intelligence
+
+## Sentence-by-Sentence Translation Map
+
+---
+
+### Section: LLM — Not a "Magic Box," but a Function Driven by Probability
+
+| # | Korean (Original) | English (Natural Translation) |
+|---|---|---|
+| 1 | 요즘 우리는 LLM을 마치 뭐든지 척척 답해줄 것 같은 "검은 상자"처럼 느끼곤 합니다. | These days, we tend to think of LLMs as "black boxes" that can magically answer anything we throw at them. |
+| 2 | 하지만 기술적으로 보면 LLM은 훨씬 소박합니다. | But under the hood, LLMs are far more modest than that. |
+| 3 | 가장 단순하게 말하면, | Put as simply as possible: |
+| 4 | LLM은 "지금까지의 문맥을 보고, 다음에 올 토큰의 확률 분포를 계산하는 함수"입니다. | An LLM is a function that looks at the context so far and computes a probability distribution over what token comes next. |
+| 5 | 즉, 입력(프롬프트)을 넣으면, 그 입력을 바탕으로 다음 단어(토큰)가 무엇일지 확률을 계산하고, 그중 하나를 선택해 출력합니다. | You feed it an input (a prompt), it calculates the probability of each possible next word (token), and then picks one to output. |
+| 6 | 이 과정을 반복해서 문장을 만들어 내죠. | Repeat that process, and you get a sentence. |
+| 7 | 예를 들어 10 + 8 =이라는 입력이 들어오면, 모델 내부에서는 "18일 확률, 20일 확률, 108일 확률…" 같은 분포가 계산되고, 학습이 잘 되어 있다면 18이 가장 높은 확률을 갖도록 훈련됩니다. | For example, given the input `10 + 8 =`, the model internally computes a distribution — some probability for "18," some for "20," some for "108," and so on. If the model has been trained well, "18" will have the highest probability. |
+| 8 | 이걸 우리는 Training(학습)이라고 부릅니다. | We call this process training. |
+| 9 | 데이터를 계속 보여주면서 "이 상황에서는 이 토큰이 정답이야"라고 모델의 파라미터를 미세하게 조정하는 과정이죠. | It works by repeatedly showing data to the model and nudging its parameters so that it learns: "In this situation, this token is the right answer." |
+| 10 | 그래서 간단한 문제에 대해서는, 어떻게 질문을 하든 그럴듯한 정답을 잘 내놓습니다. | For simple problems, the model gives reasonable answers no matter how you phrase the question. |
+| 11 | 하지만 문제가 복잡해질수록, 그리고 특정 도메인(의료, 법률, 사내 규정 등)의 깊은 지식을 요구할수록, 모델이 "가장 그럴듯하다고 생각하는 답"이 실제 정답과 어긋날 가능성도 커집니다. | But as problems get more complex — and especially when they require deep domain knowledge in areas like healthcare, law, or internal company policies — the gap between "the answer the model finds most plausible" and the actual correct answer starts to widen. |
+| 12 | 그럼 여기서 현실적인 고민이 시작됩니다. | And that's where a very practical question arises: |
+| 13 | "그렇다고 더 좋은 LLM이 나올 때까지 손 놓고 기다릴 수만은 없다." | "We can't just sit around waiting for a better LLM to come along." |
+| 14 | 우리가 할 수 있는 일은, 지금 가진 모델의 잠재력을 최대한 끌어올리는 것입니다. | What we can do is squeeze every bit of potential out of the model we already have. |
+| 15 | 그리고 그 핵심은 의외로 단순합니다. | And the core idea behind that is surprisingly simple: |
+| 16 | 모델이 정답에 도달할 확률이 최대가 되도록, 우리가 넣어주는 문맥(Context)을 설계하는 것. | Design the context we feed the model so that its probability of arriving at the correct answer is as high as possible. |
+| 17 | 이 전체 최적화 과정을 요즘은 Context Engineering이라고 부릅니다. | This entire optimization process is what people now call Context Engineering. |
+| 18 | 이 용어가 최근 따로 이름을 얻게 된 이유가 있습니다. | There's a reason this term recently earned its own name. |
+| 19 | 예전에는 이 작업 대부분이 "Prompt Engineering"이라는 말 안에 뭉뚱그려져 있었습니다. | Previously, most of this work was lumped under the umbrella of "Prompt Engineering." |
+| 20 | 하지만 실무에서 LLM 기반 시스템을 만들어보면, 프롬프트 한 줄을 잘 쓰는 것만으로는 부족합니다. | But once you actually build LLM-powered systems in production, you quickly realize that crafting a single good prompt isn't enough. |
+| 21 | 어떤 외부 지식을 가져올지, 도구 호출 결과를 어떻게 다음 단계에 넘길지, 전체 작업 흐름에서 각 시점의 문맥을 어떻게 구성할지 — 이 모든 것이 모델의 출력 품질을 좌우합니다. | Which external knowledge to retrieve, how to pass tool-call results into the next step, how to compose the context at each point in an entire workflow — all of these decisions shape the quality of the model's output. |
+| 22 | 그래서 "프롬프트를 잘 쓰는 것"을 넘어, 모델에 전달되는 문맥 전체를 시스템 차원에서 설계하는 일을 Context Engineering이라고 구분해서 부르게 된 것입니다. | That's why we now distinguish Context Engineering — the system-level design of everything that goes into the model's context — from simply "writing good prompts." |
+| 23 | 이제, Context Engineering을 위해 등장한 대표적인 흐름들을 Prompt Engineering → RAG → Agent 순서로 같이 짚어보겠습니다. | Let's walk through the key developments that make up Context Engineering, in order: Prompt Engineering → RAG → Agents. |
+
+---
+
+### Section: Prompt Engineering — It All Starts with Crafting the Right Question
+
+| # | Korean (Original) | English (Natural Translation) |
+|---|---|---|
+| 24 | 많은 분들이 한 번쯤 이런 의문을 가져보셨을 겁니다. | You've probably wondered about this at least once: |
+| 25 | "같은 GPT라는데, ChatGPT에서 답 나오는 거랑 API로 직접 붙였을 때 답이 왜 다르지?" | "It's the same GPT under the hood — so why does ChatGPT give me one answer while the raw API gives me something completely different?" |
+| 26 | 이 차이는 여러 요인이 섞여 있지만, 그중에서 분명하게 작용하는 요소가 '프롬프트(시스템 메시지) 설계'입니다. | Multiple factors are at play, but one that clearly makes a difference is how the prompt — specifically the system message — is designed. |
+| 27 | 요즘 LLM 기반 서비스들은 겉으로는 "질문 한 줄만 받는 것처럼" 보이지만, 실제로는 서비스 내부에 아주 정교하게 설계된 프롬프트가 항상 앞에 붙은 채로 모델에 전달됩니다. | Today's LLM-based services may look like they just take your one-line question, but behind the scenes, a carefully engineered prompt is always prepended before anything reaches the model. |
+| 28 | 마치 가게마다 다른 비밀 레시피가 있는 것과 비슷합니다. | Think of it like every restaurant having its own secret recipe. |
+| 29 | 범용 서비스(예: ChatGPT) | General-purpose services (e.g., ChatGPT) |
+| 30 | 전 세계 수많은 사용자의 일상 대화, 업무, 학습을 두루 지원해야 하므로 프롬프트도 매우 범용적이면서 안전하게 설계됩니다. | These need to serve millions of users worldwide across casual chat, work tasks, and learning — so the prompt is designed to be broadly useful and safe. |
+| 31 | 덕분에 일상적인 질문에는 꽤 잘 답하지만, 의료나 법률처럼 틀리면 안 되는 영역에서는 조심스럽게 설계되어 있음에도 불구하고 여전히 한계가 있죠. | That makes them pretty good at everyday questions, but even with careful guardrails, they still hit their limits in high-stakes domains like healthcare or law. |
+| 32 | 도메인 특화 서비스(예: 의료 진단 보조 AI) | Domain-specific services (e.g., a medical diagnosis assistant) |
+| 33 | 여기서는 오직 의료라는 도메인에 집중할 수 있습니다. | Here, the focus is entirely on a single domain — medicine. |
+| 34 | "이런 표현은 절대 쓰지 말 것", "이런 경우엔 반드시 근거 자료를 함께 제시할 것" 등 의료진을 위해 특화된 프롬프트를 만들 수 있죠. | You can build prompts with rules like "never use this phrasing" or "always cite supporting evidence in these cases" — tailored specifically for clinicians. |
+| 35 | 그래서 우리가 실제로 AI 서비스나 AI Assistant를 기획할 때는 "GPT를 쓴다"라는 문장만으로는 아무것도 설명이 안 됩니다. | That's why, when we're actually planning an AI service or assistant, saying "we use GPT" explains almost nothing. |
+| 36 | 반드시 다음 질문을 함께 고민해야 합니다. | You need to think through questions like these: |
+| 37 | 이 서비스를 누가 쓸 것인가? (영업팀, 개발자, 의사, 일반 사용자…) | Who will use this service? (Sales teams, developers, doctors, general consumers…) |
+| 38 | 이 사람들은 어떤 배경지식과 언어 습관을 갖고 있는가? | What background knowledge and communication style do they bring? |
+| 39 | 어느 부분에서 틀리면 위험한가, 어디까지는 "도움말"로 허용할 수 있는가? | Where would a wrong answer be dangerous, and where is "helpful but imperfect" acceptable? |
+| 40 | 이 질문에 대한 답이 곧 프롬프트 설계의 방향이 됩니다. | The answers to these questions become your prompt design direction. |
+| 41 | 그리고 여기가 흔히 말하는 Prompt Engineering의 영역입니다. | This is the domain of what we commonly call Prompt Engineering. |
+| 42 | Prompt Engineering이 잘 되어 있다면, 사용자는 LLM을 깊게 이해하지 않아도, 그냥 평소 하듯이 대충 물어봐도 항상 일정 수준 이상의 답을 얻는 경험을 하게 됩니다. | When Prompt Engineering is done right, users don't need to understand LLMs at all — they can ask questions casually, the way they normally would, and consistently get answers above a certain quality bar. |
+
+---
+
+### Section: RAG — Bringing Knowledge from Outside the Model in Real Time
+
+| # | Korean (Original) | English (Natural Translation) |
+|---|---|---|
+| 43 | Prompt Engineering은 Context Engineering의 가장 기본적인 축입니다. | Prompt Engineering is the most fundamental pillar of Context Engineering. |
+| 44 | "모델에 전달되는 문맥 중, 고정적으로 설계할 수 있는 부분"을 최적화하는 것이니까요. | It's about optimizing the static, designable portion of the context that gets passed to the model. |
+| 45 | 하지만 고정된 프롬프트만으로는 커버할 수 없는 영역이 있습니다 — 바로 매 질문마다 달라지는 동적인 지식입니다. | But there's a whole dimension that static prompts can't cover — the dynamic knowledge that changes with every question. |
+| 46 | RAG(Retrieval-Augmented Generation)는 "질문에 맞는 자료를 미리 찾아와서 같이 보여주는 기술"입니다. | RAG (Retrieval-Augmented Generation) is the technique of finding relevant materials for a given question and presenting them alongside it. |
+| 47 | 아이디어는 아주 직관적입니다. | The idea is wonderfully intuitive: |
+| 48 | "새로운 지식을 LLM 안에 넣으려면(재학습·파인튜닝) 시간도, 돈도 많이 든다. 그 대신, 지식을 모델 밖에 저장해 두고, 질문이 들어올 때마다 필요한 정보만 뽑아서 프롬프트에 붙여주면 어떨까?" | "Baking new knowledge into an LLM (through retraining or fine-tuning) costs serious time and money. What if, instead, we stored knowledge outside the model and just pulled in the relevant bits whenever a question comes in?" |
+| 49 | RAG는 이 아이디어를 구현한 대표적인 기술입니다. | RAG is the go-to technology for making this idea real. |
+| 50 | 실제로는 다음과 같은 식으로 동작합니다. | In practice, it works like this: |
+| 51 | 회사 문서, 매뉴얼, 노션 페이지, 위키, FAQ, 로그 등을 수집한다. | Collect your company docs, manuals, Notion pages, wikis, FAQs, logs, and so on. |
+| 52 | 이 텍스트들을 벡터 임베딩(문장을 숫자 벡터로 표현)으로 변환해 벡터 DB에 저장한다. | Convert those texts into vector embeddings (numerical representations of meaning) and store them in a vector database. |
+| 53 | 사용자가 질문을 하면, 그 질문 역시 벡터로 바꿔서 가장 비슷한 의미를 가진 문장/문서 조각들을 검색한다. | When a user asks a question, convert that question into a vector too, and search for the most semantically similar text chunks. |
+| 54 | 이렇게 찾은 텍스트 조각들을 질문과 함께 프롬프트에 붙여서 LLM에 전달한다. | Attach those retrieved chunks to the question in the prompt and send it all to the LLM. |
+| 55 | 결과적으로 LLM은 "훈련 데이터에 들어있던 오래된 정보"에만 의존하는 것이 아니라, 지금 이 순간의 내부 문서·지식 기반을 참고해 답을 할 수 있게 됩니다. | As a result, the LLM no longer relies solely on the stale information baked into its training data — it can reference your current internal documents and knowledge base when generating answers. |
+| 56 | 정리하면, RAG는 다음과 같은 장점을 제공합니다. | To sum up, RAG offers these key advantages: |
+| 57 | 그때그때 필요한 정보만 뽑아와서, 더 좋은 컨텍스트를 구성할 수 있다. → 관련 없는 긴 문서를 통째로 넣는 대신, 질문과 가장 가까운 일부 문단만 추려 넣으니 정답 가능성이 올라갑니다. | It pulls in only the information needed for each query, building a better context. Instead of stuffing in entire irrelevant documents, you include just the paragraphs closest to the question — which raises the odds of a correct answer. |
+| 58 | LLM의 토큰을 효율적으로 쓴다. → 프롬프트 길이는 제한되어 있으니, "작지만 핵심적인 정보"로 컨텍스트를 구성하는 게 중요합니다. | It uses the LLM's token budget efficiently. Prompt length is limited, so filling the context with small but essential information matters. |
+| 59 | 모델을 바꾸지 않고도 서비스를 확장할 수 있다. → 새로운 지식은 임베딩 & 벡터 DB에 추가하면 되고, LLM 자체는 그대로 둘 수 있습니다. | It lets you scale the service without changing the model. New knowledge just gets embedded and added to the vector DB; the LLM itself stays untouched. |
+| 60 | 사내 전용 지식을 안전하게 연결할 수 있다. → 민감한 내부 문서는 클라우드 검색이나 자체 벡터 DB에 두고, 사내 전용 RAG 시스템을 통해서만 LLM에 전달하도록 설계할 수 있습니다. | It connects internal knowledge securely. Sensitive documents stay in your own cloud search or private vector DB, and only reach the LLM through your in-house RAG pipeline. |
+| 61 | 물론 RAG가 마냥 공짜는 아닙니다. | Of course, RAG isn't free. |
+| 62 | 텍스트를 임베딩으로 만드는 과정 자체가 추가 연산 비용입니다. | The embedding process itself adds computational overhead. |
+| 63 | 벡터 DB나 검색 인프라를 운영·모니터링해야 하기 때문에, 단순히 RDB만 쓸 때보다 구조와 관리가 복잡해집니다. | Running and monitoring a vector DB and retrieval infrastructure adds complexity well beyond what a simple relational database requires. |
+| 64 | 그래서 내부적으로 제공해야 할 정보량이 아주 적은 서비스라면, 별도의 RAG 인프라를 구축하는 게 오히려 과투자가 될 수 있습니다. | So if the volume of internal knowledge your service needs to serve is small, standing up a full RAG infrastructure might actually be overkill. |
+
+---
+
+### Section: Agents — When AI Starts Doing the Work
+
+| # | Korean (Original) | English (Natural Translation) |
+|---|---|---|
+| 65 | 지금까지를 정리해보면, 우리가 해온 일은 이렇습니다. | Let's take stock of what we've covered so far: |
+| 66 | Prompt Engineering: 같은 모델로도, 어떤 사용자·도메인을 상정하느냐에 따라 훨씬 더 좋은 답을 끌어내는 방법을 연구해 왔습니다. | Prompt Engineering: We've explored how to draw far better answers from the same model by tailoring it to specific users and domains. |
+| 67 | RAG: 모델 자체는 바꾸지 않고, 외부 지식 기반을 붙여줌으로써 더 정확하고 최신의 답을 만들 수 있는 구조를 만들어 왔습니다. | RAG: We've built a structure that produces more accurate, up-to-date answers by attaching external knowledge bases — without touching the model itself. |
+| 68 | 하지만 이 두 가지는 여전히 공통된 한계를 가지고 있습니다. | But these two approaches still share a common limitation: |
+| 69 | "결국 한 번의 요청 안에서 모든 것을 해결하는 구조"라는 점입니다. | They're fundamentally built to resolve everything within a single request. |
+| 70 | 모델은 여전히, 입력 한 번, 출력 한 번 길어야 몇 번의 대화 턴을 이어가는 수준에서만 움직이는 경우가 많습니다. | The model still mostly operates in a one-input-one-output mode — at best, a few conversational turns. |
+| 71 | 그런데 실제 우리가 하고 싶은 일은 좀 다릅니다. | But the tasks we actually want done look quite different: |
+| 72 | "먼저 관련 문서를 모으고, 중요한 항목만 뽑아서 표로 정리하고, 그 다음에 우리 회사 기준으로 위험도를 평가해줘." | "First, gather the relevant documents. Then extract the key items and organize them into a table. Finally, assess the risk level based on our company's criteria." |
+| 73 | 이런 작업은 여러 단계를 거쳐야 하는 일입니다. | This kind of work requires multiple steps in sequence. |
+| 74 | 그러면 이렇게 여러 단계를 거쳐야 하는 일을, 한 번의 요청만으로 LLM에게 맡길 수 있을까요? | So can we really hand off a multi-step task like this to an LLM with just one request? |
+| 75 | 여기서 등장하는 개념이 바로 Agent(에이전트) 입니다. | This is where the concept of an Agent comes in. |
+| 76 | Agent는 LLM을 "실행 주체"로 만든다 | Agents turn LLMs into autonomous actors. |
+| 77 | Agent를 한 문장으로 정의하면 이렇게 말할 수 있습니다. | In one sentence, an Agent is: |
+| 78 | "LLM이 스스로 계획을 세우고, 필요한 도구를 호출하고, 여러 단계에 걸쳐 문제를 해결하도록 만든 시스템." | A system that enables an LLM to plan on its own, call the tools it needs, and solve problems across multiple steps. |
+| 79 | 최근 프레임워크에서 정의하는 LLM 기반 Agent는 보통 다음과 같은 능력을 전제로 합니다. | Modern frameworks define LLM-based Agents as having the following core capabilities: |
+| 80 | Planning: 문제를 보고 "먼저 A를 하고, 그 다음 B, 마지막에 C를 하자"라는 형태로 작업을 여러 단계로 나누어 계획을 세웁니다. | Planning: Look at the problem and break it down — "first do A, then B, finally C" — creating a step-by-step execution plan. |
+| 81 | Tool Use: 계산기, 데이터베이스, 외부 API, 코드 실행 환경, 웹 브라우저 등 다양한 도구를 직접 호출합니다. | Tool Use: Directly invoke a range of tools — calculators, databases, external APIs, code execution environments, web browsers, and more. |
+| 82 | Retrieval: 필요할 때 RAG 시스템을 호출해, 관련 문서나 데이터를 가져와 참고합니다. | Retrieval: Call on a RAG system as needed to fetch relevant documents or data. |
+| 83 | Memory & State: 이전 단계에서 무엇을 했는지, 어떤 결과를 얻었는지, 아직 남은 할 일은 무엇인지 등의 상태(state)를 관리합니다. | Memory & State: Keep track of what's been done, what results came back, and what still needs to happen. |
+| 84 | Reflection & Iteration: 도구 실행 결과를 보고 "이걸로 충분한가?", "한 번 더 조회해야 하나?"를 판단하면서, 필요하면 계획을 수정하고 다시 시도합니다. | Reflection & Iteration: Evaluate tool results — "Is this enough? Should I query again?" — and revise the plan or retry as needed. |
+| 85 | 이 과정을 반복하면서, LLM은 더 이상 | Through this loop, the LLM is no longer |
+| 86 | "한 번 질문하면 한 번 답해주는 함수" | "a function that takes one question and returns one answer." |
+| 87 | 에 머물지 않고, | Instead, it becomes |
+| 88 | "계획을 세우고, 도구를 사용하고, 상태를 관리하며 여러 턴에 걸쳐 실제 작업을 수행하는 존재"가 됩니다. | an entity that plans, uses tools, manages state, and carries out real work across multiple turns. |
+| 89 | Agent가 등장하면서 Context Engineering의 범위도 함께 확장되고, 따라서 이를 관리하는 것이 더 중요해 집니다. | With the arrival of Agents, the scope of Context Engineering has expanded — and managing it well has become more critical than ever. |
+| 90 | Prompt Engineering은 "한 번의 호출에서 어떤 역할·톤·규칙·제약을 설정해 줄까?"의 문제였다면, | Prompt Engineering was about the question: "What role, tone, rules, and constraints do I set for a single call?" |
+| 91 | RAG는 "그 호출을 위해 어떤 문서를, 어떤 방식으로 골라서 컨텍스트에 붙일까?"의 문제였고, | RAG extended that to: "Which documents do I select, and how, to attach to the context for that call?" |
+| 92 | Agent는 여기에 더해 "전체 작업을 여러 단계로 나눴을 때, 각 단계에서 프롬프트, 도구, 메모리를 어떻게 조합해서 제공할 것인가?"라는 시스템 전체의 문맥(Context) 설계 문제를 다루게 합니다. | Agents take it further: "When the overall task is broken into multiple steps, how do I orchestrate the prompt, tools, and memory at each step?" — a system-wide context design challenge. |
+| 93 | 그래서 Agent는 단지 "더 똑똑한 응답을 만드는 기술"이 아니라, | So Agents aren't just "a technique for smarter responses." |
+| 94 | LLM이 도구에서 벗어나 사람 대신 일을 할 수 있게 만드는, 현재 Context Engineering이 도달한 표준 형태라고 말할 수 있습니다. | They represent the current standard form of Context Engineering — the point where LLMs break free from being mere tools and start doing work on behalf of people. |

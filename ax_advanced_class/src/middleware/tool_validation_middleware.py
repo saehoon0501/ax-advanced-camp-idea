@@ -3,135 +3,71 @@ Tool Validation Middleware
 
 Provides validation for all tool calls using LangChain's @wrap_tool_call middleware.
 Uses tree-sitter-bash for robust command parsing and security validation.
+
+학습 목표:
+- DENY -> ALLOW -> ASK 3단계 검증 패턴 이해
+- 경로 기반 권한 검증 구현
+- interrupt()를 활용한 사용자 확인 흐름 구현
+- Read-before-write 패턴으로 파일 안전성 보장
 """
 
 import os
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 from langchain_core.messages import ToolMessage
-from langchain.agents.middleware import AgentMiddleware
 from langchain.tools.tool_node import ToolCallRequest
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command, interrupt
 
 from ax_advanced_class.src.config.tool_permission_config import (
-    PermissionConfig,
     PermissionLevel,
+    PermissionConfig,
     PermissionRule,
     CommandValidationResult,
-    MAX_OUTPUT_CHARS,
-    DEFAULT_TIMEOUT_MS,
-    MAX_TIMEOUT_MS,
 )
-from ax_advanced_class.src.utils.bash_parser import BashParser, ParsedCommand
+from ax_advanced_class.src.middleware._internals.tool_validation_helpers import (
+    _BashValidatorBase,
+    ToolValidationMiddlewareBase,
+    _BASH_TOOL_NAMES,
+    _FILE_TOOL_NAMES,
+    _WRITE_FILE_TOOLS,
+)
 
-# Tool name constants matching deepagents FilesystemMiddleware + LocalShellBackend
-_BASH_TOOL_NAMES = ("execute",)
-_FILE_TOOL_NAMES = ("read_file", "write_file", "edit_file", "glob", "grep", "ls")
-_WRITE_FILE_TOOLS = ("write_file", "edit_file")
 
-
-class _BashValidator:
+class _BashValidator(_BashValidatorBase):
     """
-    Validator for bash commands.
+    Bash command & path validator.
 
-    Validation logic:
-    1. Check DENY list → if listed, DENY
-    2. Check ALLOW list → if listed, ALLOW
-    3. Otherwise → ASK (default)
+    validate_command: 명령어 문자열을 검증하여 DENY/ALLOW/ASK 결정
+    validate_path: 파일 경로를 검증하여 DENY/ALLOW/ASK 결정
 
-    Uses BashParser for tree-sitter based command parsing.
+    Hint: 부모 클래스(_BashValidatorBase)에 다음 헬퍼가 있습니다:
+    - self.config: PermissionConfig (blocked_raw_patterns, blocked_paths, allowed_paths 등)
+    - self._parser: BashParser (parse 메서드로 명령어 파싱)
+    - self._check_rules(command): deny/allow rule 매칭
+    - self._validate_parsed_command(parsed): 개별 파싱 결과 검증
+    - self._get_highest_priority_result(results, command): 가장 높은 우선순위 결과 반환
     """
-
-    # Commands that modify files/directories (write operations)
-    # For these, external paths require ASK
-    _WRITE_COMMANDS = frozenset(
-        {
-            # File/directory manipulation
-            "rm",
-            "rmdir",
-            "mkdir",
-            "touch",
-            "mv",
-            "cp",
-            "ln",
-            "chmod",
-            "chown",
-            # Compression
-            "tar",
-            "zip",
-            "unzip",
-            "gzip",
-            "gunzip",
-            # File creation/modification
-            "tee",
-            "truncate",
-            "shred",
-            "install",
-            "patch",
-            "split",
-            # Sync/transfer (can write to destination)
-            "rsync",
-            "scp",
-            "wget",
-            "curl",
-            # Special files
-            "mktemp",
-            "mkfifo",
-            "mknod",
-        }
-    )
-
-    # Commands that only read files (read operations)
-    # For these, external paths are ALLOWED
-    _READ_COMMANDS = frozenset(
-        {
-            "cat",
-            "head",
-            "tail",
-            "less",
-            "more",
-            "grep",
-            "rg",
-            "ag",
-            "find",
-            "locate",
-            "ls",
-            "tree",
-            "du",
-            "df",
-            "file",
-            "stat",
-            "wc",
-            "diff",
-            "cmp",
-        }
-    )
-
-    def __init__(self, config: PermissionConfig):
-        self.config = config
-        self._parser = BashParser()
-        self._allow_rules = [PermissionRule.parse(r) for r in config.allow_rules]
-        self._deny_rules = [PermissionRule.parse(r) for r in config.deny_rules]
-
-    # =========================================================================
-    # Public API
-    # =========================================================================
 
     def validate_command(self, command: str) -> CommandValidationResult:
         """
-        Validate a shell command string.
-
-        Logic:
-        1. Check raw patterns (before parsing)
-        2. Check DENY (blocked commands, blocked patterns, blocked paths)
-        3. Check ALLOW (allowed commands)
-        4. Otherwise → ASK
+        셸 명령어를 검증합니다.
 
         Returns:
-            CommandValidationResult with the highest priority level found.
-            Priority: DENY > ALLOW > ASK
+            CommandValidationResult - DENY, ALLOW, 또는 ASK
         """
+        # TODO 1: DENY -> ALLOW -> ASK 3단계 검증
+        #
+        # Step 1: 빈 명령어 -> ALLOW (CommandValidationResult 반환)
+        # Step 2: self.config.blocked_raw_patterns 순회 -> 매치되면 DENY
+        #         (blocked_items에 매치된 pattern 포함)
+        # Step 3: self._check_rules(command) -> 결과 있으면 반환
+        # Step 4: self._parser.parse(command) -> 파싱 실패(빈 리스트)면 DENY
+        #         (reason: "Could not parse command structure")
+        # Step 5: 각 파싱 명령어에 self._validate_parsed_command() 호출
+        #         -> DENY면 즉시 반환, 아니면 results 리스트에 추가
+        # Step 6: self._get_highest_priority_result(results, command)
+        # Step 1: 빈 명령어
         if not command or not command.strip():
             return CommandValidationResult(
                 level=PermissionLevel.ALLOW,
@@ -139,8 +75,7 @@ class _BashValidator:
                 reason="Empty command",
             )
 
-        # Check raw patterns FIRST (before parsing)
-        # These catch patterns that may not parse correctly (e.g., fork bomb)
+        # Step 2: 원시 패턴 차단 (파싱 전)
         for pattern in self.config.blocked_raw_patterns:
             if pattern in command:
                 return CommandValidationResult(
@@ -150,14 +85,13 @@ class _BashValidator:
                     blocked_items=[pattern],
                 )
 
-        # Check permission rules (DENY rules first, then ALLOW rules)
+        # Step 3: PermissionRule 기반 매칭
         rule_result = self._check_rules(command)
         if rule_result:
             return rule_result
 
-        # Parse the command
+        # Step 4: 명령어 파싱
         parsed_commands = self._parser.parse(command)
-
         if not parsed_commands:
             return CommandValidationResult(
                 level=PermissionLevel.DENY,
@@ -165,34 +99,42 @@ class _BashValidator:
                 reason="Could not parse command structure",
             )
 
-        # Validate each parsed command and collect results
+        # Step 5: 각 파싱된 명령어 검증
         results: List[CommandValidationResult] = []
         for parsed in parsed_commands:
             result = self._validate_parsed_command(parsed)
             results.append(result)
-
-            # Early exit on DENY
             if result.level == PermissionLevel.DENY:
                 return result
 
-        # Return the highest priority result (DENY > ALLOW > ASK)
+        # Step 6: 최종 결과
         return self._get_highest_priority_result(results, command)
 
     def validate_path(self, path: str, is_write: bool = True) -> CommandValidationResult:
         """
-        Validate a file path.
-
-        Logic:
-        1. Check blocked paths → DENY
-        2. Check allowed paths (workspace + allowed_paths) → ALLOW
-        3. If outside workspace:
-           - Read operations → ALLOW (can read any file)
-           - Write operations → ASK (requires user approval)
+        파일 경로를 검증합니다.
 
         Args:
-            path: The file path to validate
-            is_write: True if this is a write operation, False for read operations
+            path: 검증할 파일 경로
+            is_write: True이면 쓰기 작업, False이면 읽기 작업
+
+        Returns:
+            CommandValidationResult - DENY, ALLOW, 또는 ASK
         """
+        # TODO 2: 경로 기반 DENY -> ALLOW -> ASK
+        #
+        # Step 1: 빈 경로 -> ALLOW (reason: "Empty path defaults to workspace")
+        # Step 2: os.path.abspath(os.path.expanduser(path))로 정규화
+        # Step 3: self.config.blocked_paths 순회
+        #         -> os.path.abspath(blocked)와 비교, normalized.startswith면 DENY
+        #         (blocked_items에 blocked 포함)
+        # Step 4: [self.config.workspace_root] + self.config.allowed_paths 순회
+        #         -> os.path.abspath(os.path.expanduser(allowed))와 비교
+        #         -> normalized == allowed_abs 또는 normalized.startswith(allowed_abs + os.sep)면 ALLOW
+        # Step 5: 위 어디에도 해당 안 되면 (외부 경로):
+        #         -> is_write이면 ASK (reason에 normalized 경로 포함)
+        #         -> !is_write이면 ALLOW
+        # Step 1: 빈 경로
         if not path:
             return CommandValidationResult(
                 level=PermissionLevel.ALLOW,
@@ -200,9 +142,10 @@ class _BashValidator:
                 reason="Empty path defaults to workspace",
             )
 
+        # Step 2: 경로 정규화
         normalized = os.path.abspath(os.path.expanduser(path))
 
-        # 1. Check blocked paths → DENY (always, regardless of read/write)
+        # Step 3: 차단 경로 체크
         for blocked in self.config.blocked_paths:
             blocked_abs = os.path.abspath(blocked)
             if normalized.startswith(blocked_abs):
@@ -213,7 +156,7 @@ class _BashValidator:
                     blocked_items=[blocked],
                 )
 
-        # 2. Check allowed paths (workspace + allowed_paths) → ALLOW
+        # Step 4: 허용 경로 체크
         allowed_roots = [self.config.workspace_root] + self.config.allowed_paths
         for allowed in allowed_roots:
             allowed_abs = os.path.abspath(os.path.expanduser(allowed))
@@ -224,297 +167,50 @@ class _BashValidator:
                     reason=f"Path is in allowed directory: {allowed}",
                 )
 
-        # 3. Path is outside workspace
+        # Step 5: 외부 경로 — 읽기/쓰기 구분
         if is_write:
-            # Write operations outside workspace → ASK
             return CommandValidationResult(
                 level=PermissionLevel.ASK,
                 command=path,
                 reason=f"Write to external path requires approval: {normalized}",
             )
         else:
-            # Read operations outside workspace → ALLOW
             return CommandValidationResult(
                 level=PermissionLevel.ALLOW,
                 command=path,
                 reason="Read from external path is allowed",
             )
 
-    def get_normalized_path(self, path: str) -> str:
-        """Return normalized absolute path."""
-        if not path:
-            return self.config.workspace_root
-        return os.path.abspath(os.path.expanduser(path))
 
-    def _is_write_command(self, cmd_name: str) -> bool:
-        """
-        Determine if a command is a write operation.
-
-        Returns:
-            True if the command modifies files (write operation)
-            False if the command only reads files (read operation)
-
-        For unknown commands, defaults to True (write) for safety.
-        """
-        if cmd_name in self._READ_COMMANDS:
-            return False
-        if cmd_name in self._WRITE_COMMANDS:
-            return True
-        # Default to write (safer) for unknown commands
-        return True
-
-    # =========================================================================
-    # Pattern Matching
-    # =========================================================================
-
-    def _check_rules(self, command: str) -> Optional[CommandValidationResult]:
-        """
-        Check command against PermissionRule-based deny/allow rules.
-
-        Order: DENY rules → ALLOW rules
-        """
-        for rule in self._deny_rules:
-            if rule.matches("execute", command):
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=command,
-                    reason=f"Command matches deny rule: {rule}",
-                    blocked_items=[str(rule)],
-                )
-
-        for rule in self._allow_rules:
-            if rule.matches("execute", command):
-                return CommandValidationResult(
-                    level=PermissionLevel.ALLOW,
-                    command=command,
-                    reason=f"Command matches allow rule: {rule}",
-                )
-
-        return None
-
-    # =========================================================================
-    # Validation Logic: DENY → ALLOW → ASK
-    # =========================================================================
-
-    def _validate_parsed_command(self, parsed: ParsedCommand) -> CommandValidationResult:
-        """
-        Validate a single parsed command.
-
-        Logic:
-        1. Check DENY (interactive, blocked commands, blocked patterns, blocked paths)
-        2. Check ALLOW (allowed commands, allowed git subcommands)
-        3. Otherwise → ASK
-        """
-        cmd_name = parsed.name
-
-        # === DENY CHECKS ===
-
-        # 1a. Check interactive commands (no TTY available)
-        if cmd_name in self.config.interactive_commands:
-            return CommandValidationResult(
-                level=PermissionLevel.DENY,
-                command=parsed.raw_text,
-                reason=f"Interactive command '{cmd_name}' not supported (no TTY)",
-                blocked_items=[cmd_name],
-            )
-
-        # 1b. Check interactive arguments
-        interactive_args = self.config.interactive_arguments.get(cmd_name, set())
-        for pattern in interactive_args:
-            if pattern.issubset(set(parsed.arguments)):
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=parsed.raw_text,
-                    reason="Interactive flag not supported (no TTY)",
-                    blocked_items=list(pattern),
-                )
-
-        # 1c. Check deny rules for this command
-        for rule in self._deny_rules:
-            if rule.matches("execute", cmd_name) or rule.matches("execute", parsed.raw_text):
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=parsed.raw_text,
-                    reason=f"Command matches deny rule: {rule}",
-                    blocked_items=[str(rule)],
-                )
-
-        # 1d. Check blocked argument patterns
-        pattern_result = self._check_blocked_patterns(parsed)
-        if pattern_result:
-            return pattern_result
-
-        # 1e. Validate paths in arguments
-        # Determine if this is a read or write command
-        is_write = self._is_write_command(cmd_name)
-
-        for path in parsed.paths:
-            path_result = self.validate_path(path, is_write=is_write)
-
-            # DENY always blocks
-            if path_result.level == PermissionLevel.DENY:
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=parsed.raw_text,
-                    reason=f"Command contains blocked path: {path}",
-                    blocked_items=[path],
-                )
-
-            # ASK for write operations to external paths
-            if path_result.level == PermissionLevel.ASK:
-                return CommandValidationResult(
-                    level=PermissionLevel.ASK,
-                    command=parsed.raw_text,
-                    reason=f"Write to external path requires approval: {path}",
-                )
-
-        # === ALLOW CHECKS ===
-
-        # 2a. Special handling for git commands
-        if cmd_name == "git":
-            return self._validate_git_command(parsed)
-
-        # 2b. Check allow rules for this command
-        for rule in self._allow_rules:
-            if rule.matches("execute", cmd_name) or rule.matches("execute", parsed.raw_text):
-                return CommandValidationResult(
-                    level=PermissionLevel.ALLOW,
-                    command=parsed.raw_text,
-                    reason=f"Command matches allow rule: {rule}",
-                )
-
-        # === DEFAULT: ASK ===
-        return CommandValidationResult(
-            level=PermissionLevel.ASK,
-            command=parsed.raw_text,
-            reason=f"Command '{cmd_name}' requires confirmation",
-        )
-
-    def _check_blocked_patterns(self, parsed: ParsedCommand) -> Optional[CommandValidationResult]:
-        """Check if the command matches any blocked argument patterns."""
-        cmd_name = parsed.name
-        patterns = self.config.blocked_argument_patterns.get(cmd_name, set())
-
-        if not patterns:
-            return None
-
-        # Create a set of all tokens (command name + arguments)
-        all_tokens = {cmd_name} | set(parsed.arguments)
-
-        # Add pipe indicator if present
-        if parsed.has_pipe:
-            all_tokens.add("|")
-
-        # Check each blocked pattern
-        for pattern in patterns:
-            if pattern.issubset(all_tokens):
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=parsed.raw_text,
-                    reason=f"Command matches blocked pattern: {pattern}",
-                    blocked_items=list(pattern),
-                )
-
-        return None
-
-    def _validate_git_command(self, parsed: ParsedCommand) -> CommandValidationResult:
-        """
-        Special validation for git commands.
-
-        Logic:
-        1. Check blocked patterns → DENY
-        2. Check allowed git subcommands → ALLOW
-        3. Otherwise → ASK
-        """
-        # 1. Check blocked patterns
-        pattern_result = self._check_blocked_patterns(parsed)
-        if pattern_result:
-            return pattern_result
-
-        # Get subcommand
-        subcommand = parsed.arguments[0] if parsed.arguments else None
-
-        if not subcommand:
-            return CommandValidationResult(
-                level=PermissionLevel.ALLOW,
-                command=parsed.raw_text,
-                reason="Git command without subcommand",
-            )
-
-        # 2. Check allowed git subcommands → ALLOW
-        if subcommand in self.config.allowed_git_subcommands:
-            return CommandValidationResult(
-                level=PermissionLevel.ALLOW,
-                command=parsed.raw_text,
-                reason=f"Git subcommand '{subcommand}' is allowed",
-            )
-
-        # 3. Otherwise → ASK
-        return CommandValidationResult(
-            level=PermissionLevel.ASK,
-            command=parsed.raw_text,
-            reason=f"Git subcommand '{subcommand}' requires confirmation",
-        )
-
-    def _get_highest_priority_result(self, results: List[CommandValidationResult], original_command: str) -> CommandValidationResult:
-        """
-        Get the highest priority result from a list.
-
-        Priority: DENY > ALLOW > ASK
-        """
-        if not results:
-            return CommandValidationResult(
-                level=PermissionLevel.ASK,
-                command=original_command,
-                reason="No commands found",
-            )
-
-        priority = {
-            PermissionLevel.DENY: 0,  # Highest priority (wins)
-            PermissionLevel.ALLOW: 1,  # Second priority
-            PermissionLevel.ASK: 2,  # Lowest priority (default)
-        }
-
-        return min(results, key=lambda r: priority[r.level])
-
-
-class ToolValidationMiddleware(AgentMiddleware):
+class ToolValidationMiddleware(ToolValidationMiddlewareBase):
     """
-    Middleware for validating all tool calls.
-
-    Facilitates validation in the agent lifecycle by intercepting tool calls
-    and delegating validation to _BashValidator.
+    도구 호출을 가로채 검증하는 미들웨어.
 
     Features:
-    - Read-before-write/edit check: Existing files must be read before write/edit
-    - Stale read detection: Detects if a file was modified since last read
+    - Bash 명령어: validate_command로 DENY/ALLOW/ASK 검증
+    - 파일 도구: validate_path로 경로 검증 + read-before-write 보장
+    - ASK인 경우 interrupt()로 사용자에게 확인 요청
+
+    Hint: 부모 클래스(ToolValidationMiddlewareBase)에 다음 헬퍼가 있습니다:
+    - self._validator: _BashValidator 인스턴스
+    - self._read_files: dict[str, float] (경로 -> 읽은 시점의 mtime)
+    - self._is_allowed(tool_name, content): 세션 규칙 매칭 확인
+    - self._add_allow_rule(tool_name, content): 세션 규칙 추가
+    - self._enforce_timeout_limits(args): 타임아웃 제한 적용
+    - self._truncate_output(result): 출력 자르기
+    - self._format_tool_error(tool_name, args, error): 에러 메시지 포맷
     """
 
     def __init__(self, config: PermissionConfig):
-        self._validator = _BashValidator(config)
-        self._config = config
-        # Track read files: {normalized_path: modification_time_at_read}
-        self._read_files: dict[str, float] = {}
-        # Session-scoped permission rules: Tool(pattern) format
-        self._allow_rules: list[PermissionRule] = []
-
-    def _is_allowed(self, tool_name: str, content: str) -> bool:
-        """Check if any session rule matches this tool call."""
-        return any(rule.matches(tool_name, content) for rule in self._allow_rules)
-
-    def _add_allow_rule(self, tool_name: str, content: str) -> str:
-        """Create a prefix rule from content and add it. Returns the rule string."""
-        prefix = content.split()[0] if content.strip() else content
-        rule = PermissionRule(tool_name=tool_name, pattern=f"{prefix}:*")
-        self._allow_rules.append(rule)
-        return str(rule)
+        super().__init__(config)
+        self._validator = _BashValidator(config)  # 학생이 구현한 validator 사용
 
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
-        """Intercepts tool calls to validate arguments before execution."""
+        """도구 호출을 가로채 검증합니다."""
         tool_name = request.tool_call["name"]
         args = request.tool_call["args"]
         tool_call_id = request.tool_call["id"]
@@ -522,7 +218,18 @@ class ToolValidationMiddleware(AgentMiddleware):
         try:
             # --- Bash Tool Validation ---
             if tool_name in _BASH_TOOL_NAMES:
-                # Enforce timeout limits (hard limit)
+                # TODO 3: Bash 검증 + ASK 처리
+                #
+                # Step 1: self._enforce_timeout_limits(args)
+                # Step 2: "command"가 args에 있으면 self._validator.validate_command(args["command"])
+                # Step 3: result.level == DENY -> ToolMessage(status="error") 반환
+                #         content: f"Error: Command denied. {result.reason}"
+                # Step 4: result.level == ASK:
+                #   4a. self._is_allowed(tool_name, command)가 False이면:
+                #       - cmd_prefix = command.split()[0] (빈 문자열이면 command 그대로)
+                #       - interrupt() 호출 (question, tool_call_id, command, tool_name, allow_rule 포함)
+                #       - response == "always" -> self._add_allow_rule(tool_name, command)
+                #       - response가 falsy 또는 "deny:"로 시작 -> ToolMessage(status="error") 반환
                 self._enforce_timeout_limits(args)
 
                 if "command" in args:
@@ -535,7 +242,6 @@ class ToolValidationMiddleware(AgentMiddleware):
                             status="error",
                         )
 
-                    # ASK level - prompt user unless matched by a session allow rule
                     if result.level == PermissionLevel.ASK:
                         command = args["command"]
                         if not self._is_allowed(tool_name, command):
@@ -562,20 +268,34 @@ class ToolValidationMiddleware(AgentMiddleware):
 
             # --- File Tool Validation ---
             elif tool_name in _FILE_TOOL_NAMES:
+                # TODO 4: 경로 검증 + Read-before-write
+                #
+                # Part A: 경로 검증
+                #   A1. args에서 경로 추출 (키 우선순위: "file_path" > "validated_path" > "path")
+                #   A2. 절대경로가 아니면 os.path.join(self._config.workspace_root, path)
+                #   A3. normalized_path = self._validator.get_normalized_path(path)
+                #   A4. is_write = tool_name in _WRITE_FILE_TOOLS
+                #   A5. self._validator.validate_path(path, is_write=is_write)
+                #   A6. DENY -> ToolMessage(status="error", content="Error: Path denied. ...")
+                #   A7. ASK -> self._is_allowed 확인 -> interrupt() -> response 처리
+                #       (allow_rule에 parent_dir 사용: os.path.dirname(normalized_path))
+                #       response == "always" -> self._allow_rules.append(PermissionRule(...))
+                #   A8. args[path_key] = normalized_path (정규화된 경로로 업데이트)
+                #
+                # Part B: Read-before-write 검증 (is_write가 True일 때만)
+                #   B1. os.path.exists(normalized_path) 확인
+                #   B2. 파일 존재 + normalized_path가 self._read_files에 없음
+                #       -> ToolMessage(status="error") "You must read the file first..."
+                #   B3. 파일 존재 + os.path.getmtime > self._read_files[normalized_path]
+                #       -> ToolMessage(status="error") "File has been modified since..."
                 if "file_path" in args or "path" in args or "validated_path" in args:
-                    # Handle 'file_path' (FilesystemMiddleware), 'path', and 'validated_path' parameter names
                     path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
                     path = args[path_key]
 
                     if not os.path.isabs(path):
                         path = os.path.join(self._config.workspace_root, path)
 
-                    # Get normalized path for tracking
                     normalized_path = self._validator.get_normalized_path(path)
-
-                    # Determine if this is a read or write operation
-                    # read, grep, glob → read operations
-                    # write, edit → write operations
                     is_write = tool_name in _WRITE_FILE_TOOLS
 
                     result = self._validator.validate_path(path, is_write=is_write)
@@ -587,7 +307,6 @@ class ToolValidationMiddleware(AgentMiddleware):
                             status="error",
                         )
 
-                    # ASK for write operations to external paths
                     if result.level == PermissionLevel.ASK:
                         if not self._is_allowed(tool_name, normalized_path):
                             parent_dir = os.path.dirname(normalized_path)
@@ -613,12 +332,10 @@ class ToolValidationMiddleware(AgentMiddleware):
                                     status="error",
                                 )
 
-                    # --- Read-before-write/edit check and stale read detection ---
+                    # Read-before-write check
                     if is_write:
                         file_exists = os.path.exists(normalized_path)
-
                         if file_exists:
-                            # Check if file was read first
                             if normalized_path not in self._read_files:
                                 operation = "writing to" if tool_name == "write_file" else "editing"
                                 return ToolMessage(
@@ -626,8 +343,6 @@ class ToolValidationMiddleware(AgentMiddleware):
                                     tool_call_id=tool_call_id,
                                     status="error",
                                 )
-
-                            # Check for stale read (file modified since last read)
                             try:
                                 current_mtime = os.path.getmtime(normalized_path)
                                 read_mtime = self._read_files[normalized_path]
@@ -639,31 +354,27 @@ class ToolValidationMiddleware(AgentMiddleware):
                                         status="error",
                                     )
                             except OSError:
-                                pass  # File might have been deleted
+                                pass
 
-                    # Update with normalized path
                     args[path_key] = normalized_path
 
-            # If validation passes, proceed to next middleware or tool call
+            # --- Execute handler + post-processing ---
             handler_result = handler(request)
 
-            # --- Track reads after successful read operations ---
+            # Track reads after successful read operations
             if tool_name == "read_file":
                 if isinstance(handler_result, ToolMessage) and handler_result.status != "error":
-                    # Track the read
                     if "file_path" in args or "path" in args or "validated_path" in args:
                         path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
                         normalized_path = self._validator.get_normalized_path(args[path_key])
                         try:
-                            mtime = os.path.getmtime(normalized_path)
-                            self._read_files[normalized_path] = mtime
+                            self._read_files[normalized_path] = os.path.getmtime(normalized_path)
                         except OSError:
-                            pass  # File might not exist
+                            pass
 
-            # --- Update tracking after successful write/edit ---
+            # Update tracking after successful write/edit
             if tool_name in _WRITE_FILE_TOOLS:
                 if isinstance(handler_result, ToolMessage) and handler_result.status != "error":
-                    # Update the tracked mtime after successful write/edit
                     if "file_path" in args or "path" in args or "validated_path" in args:
                         path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
                         normalized_path = self._validator.get_normalized_path(args[path_key])
@@ -686,67 +397,3 @@ class ToolValidationMiddleware(AgentMiddleware):
                 tool_call_id=tool_call_id,
                 status="error",
             )
-
-    def _format_tool_error(self, tool_name: str, args: dict, error: Exception) -> str:
-        """
-        Format tool errors with actionable guidance for the agent.
-
-        Parses validation errors to provide clear instructions on how to fix them.
-        """
-        error_str = str(error)
-
-        # Check for Pydantic ValidationError (missing required fields)
-        if "validation error" in error_str.lower() and "field required" in error_str.lower():
-            # Extract missing field names from error message
-            lines = error_str.split("\n")
-            missing_fields = []
-            for i, line in enumerate(lines):
-                if "Field required" in line and i > 0:
-                    # The field name is on the previous line
-                    field_name = lines[i - 1].strip()
-                    if field_name:
-                        missing_fields.append(field_name)
-
-            if missing_fields:
-                provided = ", ".join(f'"{k}"' for k in args.keys()) if args else "none"
-                missing = ", ".join(f'"{f}"' for f in missing_fields)
-                return (
-                    f"Error: Missing required parameter(s) for '{tool_name}' tool.\n"
-                    f"Missing: {missing}\n"
-                    f"Provided: {provided}\n"
-                    f"Action: Retry the tool call with ALL required parameters included."
-                )
-
-        # Check for type errors
-        if "type=" in error_str and "input_value=" in error_str:
-            return (
-                f"Error: Invalid parameter type for '{tool_name}' tool.\n"
-                f"Details: {error_str}\n"
-                f"Action: Check parameter types and retry with correct types."
-            )
-
-        # Default: include original error with guidance
-        return f"Error: Tool '{tool_name}' failed.\n" f"Details: {error_str}\n" f"Action: Review the error and retry with corrected parameters."
-
-    def _truncate_output(self, result: ToolMessage | Command) -> ToolMessage | Command:
-        """Truncate output if it exceeds MAX_OUTPUT_CHARS."""
-        if isinstance(result, ToolMessage) and len(result.content) > MAX_OUTPUT_CHARS:
-            truncated_content = result.content[:MAX_OUTPUT_CHARS] + f"\n\n[Output truncated at {MAX_OUTPUT_CHARS} characters]"
-            return ToolMessage(
-                content=truncated_content,
-                tool_call_id=result.tool_call_id,
-                status=result.status,
-            )
-        return result
-
-    def _enforce_timeout_limits(self, args: dict) -> None:
-        """Enforce timeout limits for bash commands (hard limit)."""
-        max_timeout_sec = MAX_TIMEOUT_MS // 1000
-        default_timeout_sec = DEFAULT_TIMEOUT_MS // 1000
-
-        if "timeout" in args:
-            # Clamp to max timeout
-            args["timeout"] = min(args["timeout"], max_timeout_sec)
-        else:
-            # Set default timeout
-            args["timeout"] = default_timeout_sec
