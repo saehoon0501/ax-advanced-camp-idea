@@ -80,20 +80,52 @@ class _BashValidator(_BashValidatorBase):
         Returns:
             CommandValidationResult - DENY, ALLOW, or ASK
         """
-        # TODO 2: Path-based DENY -> ALLOW -> ASK
-        #
-        # Step 1: Empty path -> ALLOW (reason: "Empty path defaults to workspace")
-        # Step 2: Normalize with os.path.abspath(os.path.expanduser(path))
-        # Step 3: Iterate through self.config.blocked_paths
-        #         -> compare with os.path.abspath(blocked), DENY if normalized.startswith
-        #         (include blocked in blocked_items)
-        # Step 4: Iterate through [self.config.workspace_root] + self.config.allowed_paths
-        #         -> compare with os.path.abspath(os.path.expanduser(allowed))
-        #         -> ALLOW if normalized == allowed_abs or normalized.startswith(allowed_abs + os.sep)
-        # Step 5: If none of the above match (external path):
-        #         -> if is_write, ASK (include normalized path in reason)
-        #         -> if !is_write, ALLOW
-        return CommandValidationResult(level=PermissionLevel.ASK, command=path, reason="")
+        # Step 1: Empty path -> ALLOW
+        if not path:
+            return CommandValidationResult(
+                level=PermissionLevel.ALLOW,
+                command=path,
+                reason="Empty path defaults to workspace",
+            )
+
+        # Step 2: Normalize path -- prevents symlink bypass attacks
+        normalized = os.path.abspath(os.path.expanduser(path))
+
+        # Step 3: Check blocked paths -> DENY (regardless of read/write)
+        for blocked in self.config.blocked_paths:
+            blocked_abs = os.path.abspath(blocked)
+            if normalized.startswith(blocked_abs):
+                return CommandValidationResult(
+                    level=PermissionLevel.DENY,
+                    command=path,
+                    reason=f"Path is in blocked directory: {blocked}",
+                    blocked_items=[blocked],
+                )
+
+        # Step 4: Check workspace + allowed paths -> ALLOW
+        allowed_roots = [self.config.workspace_root] + self.config.allowed_paths
+        for allowed in allowed_roots:
+            allowed_abs = os.path.abspath(os.path.expanduser(allowed))
+            if normalized == allowed_abs or normalized.startswith(allowed_abs + os.sep):
+                return CommandValidationResult(
+                    level=PermissionLevel.ALLOW,
+                    command=path,
+                    reason=f"Path is in allowed directory: {allowed}",
+                )
+
+        # Step 5: Outside workspace -> read is ALLOW, write is ASK
+        if is_write:
+            return CommandValidationResult(
+                level=PermissionLevel.ASK,
+                command=path,
+                reason=f"Write to external path requires approval: {normalized}",
+            )
+        else:
+            return CommandValidationResult(
+                level=PermissionLevel.ALLOW,
+                command=path,
+                reason="Read from external path is allowed",
+            )
 
 
 class ToolValidationMiddleware(ToolValidationMiddlewareBase):
@@ -132,7 +164,7 @@ class ToolValidationMiddleware(ToolValidationMiddlewareBase):
         try:
             # --- Bash Tool Validation ---
             if tool_name in _BASH_TOOL_NAMES:
-                # TODO 3: Bash validation + ASK handling
+                # TODO 2: Bash validation + ASK handling
                 #
                 # Step 1: self._enforce_timeout_limits(args)
                 # Step 2: If "command" is in args, call self._validator.validate_command(args["command"])
@@ -148,7 +180,7 @@ class ToolValidationMiddleware(ToolValidationMiddlewareBase):
 
             # --- File Tool Validation ---
             elif tool_name in _FILE_TOOL_NAMES:
-                # TODO 4: Path validation + Read-before-write
+                # TODO 3: Path validation + Read-before-write
                 #
                 # Part A: Path validation
                 #   A1. Extract path from args (key priority: "file_path" > "validated_path" > "path")
