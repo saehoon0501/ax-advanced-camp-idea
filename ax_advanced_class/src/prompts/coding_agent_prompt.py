@@ -1,5 +1,4 @@
-"""
-Coding Agent System Prompt + Dynamic Prompt Middleware
+"""Coding Agent System Prompt + Dynamic Prompt Middleware.
 
 Prompt Caching Optimization:
 - Static content (CODING_AGENT_SYSTEM_PROMPT) is placed FIRST (cacheable prefix)
@@ -14,7 +13,7 @@ from ax_advanced_class.src.config.tool_permission_config import PermissionConfig
 
 
 # =============================================================================
-# Static System Prompt — 이 부분은 매 호출마다 동일하여 Prompt Cache 대상입니다
+# Static System Prompt — This part is identical on every call, making it a Prompt Cache target
 # =============================================================================
 
 CODING_AGENT_SYSTEM_PROMPT = """You are a Coding Agent working incrementally on a long-running project.
@@ -128,7 +127,7 @@ You have access to tools for file operations, git commands, and shell execution.
 
 
 # =============================================================================
-# Dynamic Prompt Middleware — 매 LLM 호출마다 현재 상태를 프롬프트에 주입합니다
+# Dynamic Prompt Middleware — Injects current state into the prompt on every LLM call
 # =============================================================================
 
 
@@ -136,26 +135,26 @@ You have access to tools for file operations, git commands, and shell execution.
 def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
     """Dynamic prompt middleware for the Coding Agent.
 
-    매 LLM 호출 시 request.state에서 현재 상태를 읽어 프롬프트에 주입합니다.
-    정적 부분(CODING_AGENT_SYSTEM_PROMPT)은 앞에, 동적 부분은 뒤에 배치하여
-    Prompt Caching 효율을 최대화합니다.
+    On every LLM call, reads the current state from request.state and injects it into the prompt.
+    Places the static part (CODING_AGENT_SYSTEM_PROMPT) first and the dynamic part last
+    to maximize Prompt Caching efficiency.
     """
     state = request.state
     workspace = PermissionConfig().workspace_root
 
-    # TODO 1: 동적 컨텍스트를 구성하세요
+    # TODO 1: Compose the dynamic context
     #
-    # 포함해야 할 정보:
-    #   1. Workspace 경로 — Agent가 파일 작업할 때 기준 디렉토리
-    #      힌트: workspace 변수 사용
+    # Information to include:
+    #   1. Workspace path — The directory that serves as the base for the Agent's file operations
+    #      Hint: use the workspace variable
     #
-    #   2. 현재 todos 상태 — Agent가 진행 중인 작업 목록
-    #      힌트: state.get("todos", [])
+    #   2. Current todos status — The list of in-progress tasks the Agent must be able to check
+    #      Hint: state.get("todos", [])
     #
-    #   3. write_todos 사용 가이드
-    #      - 작업 시작 전 todo 생성
-    #      - in_progress는 1개만
-    #      - 완료 즉시 상태 업데이트
+    #   3. write_todos usage guide
+    #      - Create a todo before starting work
+    #      - Only 1 in_progress at a time
+    #      - Update status immediately upon completion
     #
     dynamic_content = f"""
 # CURRENT SESSION CONTEXT
@@ -166,21 +165,21 @@ Workspace: ???
 todos: ???
 """
 
-    # TODO 2: 프롬프트 합성 순서를 결정하세요
+    # TODO 2: Determine the prompt synthesis order
     #
-    # 사용 가능한 변수:
-    #   CODING_AGENT_SYSTEM_PROMPT  — 정적 시스템 프롬프트 (이미 제공됨)
-    #   SOFT_RULES_PROMPT           — git 안전, 코드 품질 등 소프트 규칙
-    #   dynamic_content             — TODO 1에서 구성한 런타임 컨텍스트
+    # Available variables:
+    #   CODING_AGENT_SYSTEM_PROMPT  — static system prompt (already provided)
+    #   SOFT_RULES_PROMPT           — soft rules for git safety, code quality, etc.
+    #   dynamic_content             — runtime context composed in TODO 1
     #
-    # 순서가 왜 중요한가?
-    #   LLM provider는 시스템 프롬프트의 "접두사(prefix)"를 캐시합니다.
-    #   변하지 않는 부분을 앞에 놓으면 → 캐시 적중 → 비용/지연 절감
-    #   변하는 부분을 앞에 놓으면 → 매번 전체 재처리 → 비용/지연 증가
+    # Why does the order matter?
+    #   The LLM provider caches the "prefix" of the system prompt.
+    #   Putting the unchanging part first -> cache hit -> cost/latency savings
+    #   Putting the changing part first -> full reprocessing every time -> cost/latency increase
     #
-    # 올바른 순서:
-    #   1. ???  ← 절대 안 변하는 것 (Agent 역할, 규칙)
-    #   2. ???  ← 거의 안 변하는 것 (소프트 규칙)
-    #   3. ???  ← 매번 변하는 것 (현재 workspace, todos)
+    # Correct order:
+    #   1. ???  <- What never changes (Agent role, rules)
+    #   2. ???  <- What rarely changes (soft rules)
+    #   3. ???  <- What changes every time (current workspace, todos)
     #
     return ""

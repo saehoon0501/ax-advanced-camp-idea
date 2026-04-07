@@ -1,12 +1,12 @@
 """Middleware for providing filesystem tools to an agent.
 
-이 파일에는 3개의 TODO가 있습니다:
-  TODO 1: _get_edit_file_description() - edit_file 도구의 설명 작성
-  TODO 2: wrap_model_call()            - 시스템 프롬프트 주입 + 도구 필터링
-  TODO 3: wrap_tool_call()             - 큰 Tool 결과를 파일로 교체 (eviction)
+This file contains 3 TODOs:
+  TODO 1: _get_edit_file_description() - Write the edit_file tool description
+  TODO 2: wrap_model_call()            - System prompt injection + tool filtering
+  TODO 3: wrap_tool_call()             - Replace large Tool results with files (eviction)
 
-모든 production 코드는 _internals/filesystem_helpers.py의 FilesystemMiddlewareBase에
-구현되어 있습니다. 여기서는 3개의 메서드만 override하면 됩니다.
+All production code is implemented in FilesystemMiddlewareBase in
+_internals/filesystem_helpers.py. You only need to override 3 methods here.
 """
 
 from collections.abc import Callable
@@ -43,62 +43,62 @@ from ax_advanced_class.src.middleware._internals.filesystem_helpers import (  # 
 class FilesystemMiddleware(FilesystemMiddlewareBase):
     """Filesystem middleware with 3 TODO exercises.
 
-    Base class(``FilesystemMiddlewareBase``)가 ls, read_file, write_file, glob,
-    grep, execute 도구를 생성합니다. 아래 3개 메서드를 구현하세요.
+    The base class (``FilesystemMiddlewareBase``) creates the ls, read_file, write_file,
+    glob, grep, and execute tools. Implement the 3 methods below.
     """
 
     # ------------------------------------------------------------------
-    # TODO 1: edit_file 도구의 설명을 작성하세요
+    # TODO 1: Write the edit_file tool description
     # ------------------------------------------------------------------
     def _get_edit_file_description(self) -> str:
-        # TODO 1: edit_file 도구의 설명(description)을 반환하세요
+        # TODO 1: Return the description for the edit_file tool
         #
-        # LLM은 도구의 코드가 아니라 description을 읽고 사용 여부를 판단합니다.
-        # 좋은 Tool 설명의 체크리스트:
-        #   - 목적(Purpose): 이 도구가 무엇을 하는지
-        #   - 사용 조건(When to use): 먼저 Read 해야 함
-        #   - 실패 케이스(Failure): old_string이 고유하지 않으면 실패
-        #   - 해결법(Resolution): 더 많은 컨텍스트 포함 or replace_all
+        # The LLM reads the tool's description, not its code, to decide how to use it.
+        # Checklist for a good Tool description:
+        #   - Purpose: What this tool does
+        #   - When to use: Must use the Read tool first
+        #   - Failure case: Fails if old_string is not unique
+        #   - Resolution: Include more context or use replace_all
         #
-        # 힌트: EDIT_FILE_TOOL_DESCRIPTION 상수를 참고하거나 직접 작성하세요
-        #   self._custom_tool_descriptions.get("edit_file")이 있으면 그것을 우선 사용
+        # Hint: Refer to the EDIT_FILE_TOOL_DESCRIPTION constant or write your own
+        #   Use self._custom_tool_descriptions.get("edit_file") first if it exists
         #
-        # StructuredTool 생성은 부모 클래스가 자동으로 처리합니다.
-        # 여기서는 설명 문자열만 반환하면 됩니다.
+        # The parent class automatically handles StructuredTool creation.
+        # You only need to return the description string here.
         #
         return ""
 
     # ------------------------------------------------------------------
-    # TODO 2: 시스템 프롬프트 주입 + 도구 필터링
+    # TODO 2: System prompt injection + tool filtering
     # ------------------------------------------------------------------
     def wrap_model_call(
         self,
         request: ModelRequest[ContextT],
         handler: Callable[[ModelRequest[ContextT]], ModelResponse[ResponseT]],
     ) -> ModelResponse[ResponseT]:
-        # TODO 2: 시스템 프롬프트를 주입하고 도구를 필터링하세요
+        # TODO 2: Inject the system prompt and filter tools
         #
-        # Step 1: execute 도구가 있는지 확인
-        # Step 2: backend가 execution 미지원이면 execute를 tools에서 제거
-        # Step 3: 시스템 프롬프트 구성
-        #   self._custom_system_prompt이 있으면 그것을 사용
-        #   없으면 FILESYSTEM_SYSTEM_PROMPT + (execute 가능하면 EXECUTION_SYSTEM_PROMPT)
-        # Step 4: append_to_system_message()로 시스템 메시지에 추가
+        # Step 1: Check if the execute tool is in request.tools
+        # Step 2: If the backend doesn't support execution, remove execute from tools
+        # Step 3: Assemble the system prompt
+        #   Use self._custom_system_prompt if available
+        #   Otherwise use FILESYSTEM_SYSTEM_PROMPT + (EXECUTION_SYSTEM_PROMPT if execute is available)
+        # Step 4: Append to the system message with append_to_system_message()
         # Step 5: return handler(request)
         return handler(request)
 
     # ------------------------------------------------------------------
-    # TODO 3: 큰 Tool 결과를 파일로 교체 (eviction)
+    # TODO 3: Replace large Tool results with files (eviction)
     # ------------------------------------------------------------------
     def wrap_tool_call(
         self,
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
-        # TODO 3: Tool 결과가 너무 크면 파일로 교체하세요
+        # TODO 3: Replace Tool execution results with files if they are too large
         #
-        # Step 1: self._tool_token_limit_before_evict가 None이면 → 그대로 handler(request)
-        # Step 2: tool name이 TOOLS_EXCLUDED_FROM_EVICTION에 있으면 → 그대로 handler(request)
+        # Step 1: If self._tool_token_limit_before_evict is None -> return handler(request) as-is
+        # Step 2: If tool name is in TOOLS_EXCLUDED_FROM_EVICTION -> return handler(request) as-is
         # Step 3: tool_result = handler(request)
         # Step 4: return self._intercept_large_tool_result(tool_result, request.runtime)
         return handler(request)

@@ -1,12 +1,13 @@
-"""Summarization middleware — 학생 구현 파일.
+"""Summarization middleware — student implementation file.
 
-대화가 길어지면 토큰이 초과됩니다. 이 미들웨어는 ``before_model``에서 이를
-감지하고, 오래된 메시지를 LLM 요약으로 교체하여 컨텍스트 윈도우를 관리합니다.
+When conversations grow long, tokens are exceeded. This middleware detects this
+in ``before_model`` and replaces old messages with an LLM summary to manage
+the context window.
 
-구현해야 할 메서드 3개:
-  1. ``_should_summarize``  — 압축이 필요한지 판단
-  2. ``_create_summary``    — LLM으로 요약 생성
-  3. ``before_model``       — 점진적 요약 패턴 조립
+Three methods to implement:
+  1. ``_should_summarize``  — Determine whether compaction is needed
+  2. ``_create_summary``    — Generate a summary with an LLM
+  3. ``before_model``       — Assemble the incremental summarization pattern
 """
 
 from typing import Any
@@ -45,43 +46,43 @@ __all__ = [
 class SummarizationMiddleware(SummarizationMiddlewareBase):
     """Summarizes conversation history when token limits are approached.
 
-    ``SummarizationMiddlewareBase`` 에 모든 헬퍼가 준비되어 있습니다.
-    아래 세 메서드만 완성하면 동작합니다.
+    All helpers are prepared in ``SummarizationMiddlewareBase``.
+    It will work by completing only the three methods below.
     """
 
     # ------------------------------------------------------------------
-    # TODO 1: 압축이 필요한지 판단하세요
+    # TODO 1: Determine whether compaction is needed
     # ------------------------------------------------------------------
     def _should_summarize(self, messages: list[AnyMessage], total_tokens: int) -> bool:
-        """대화 상태를 보고 요약을 실행할지 결정합니다.
+        """Examines the conversation state and decides whether to run summarization.
 
         Hints:
-            - self._trigger_conditions 는 [(kind, value), ...] 형태입니다.
-            - kind 는 "messages", "tokens", "fraction" 중 하나입니다.
+            - self._trigger_conditions is in the form [(kind, value), ...].
+            - kind is one of "messages", "tokens", or "fraction".
 
-            각 kind별 판단:
-              "messages" -> len(messages) >= value 이면 True
-              "tokens"   -> total_tokens >= value 이면 True
-              "fraction" -> self._get_profile_limits()로 최대 토큰을 구한 뒤
-                            max_input_tokens * value 와 total_tokens 를 비교
+            Judgment for each kind:
+              "messages" -> True if len(messages) >= value
+              "tokens"   -> True if total_tokens >= value
+              "fraction" -> get max tokens via self._get_profile_limits()
+                            then compare total_tokens with max_input_tokens * value
 
-            하나라도 True면 압축 필요. 모든 조건이 False면 압축 불필요.
-            self._trigger_conditions 가 비어있으면 항상 False 를 반환합니다.
+            If any condition is True, compaction is needed. If all are False, it is not.
+            If self._trigger_conditions is empty, always return False.
         """
         return False
 
     # ------------------------------------------------------------------
-    # TODO 2: 메시지 목록을 LLM으로 요약하세요
+    # TODO 2: Summarize the message list using an LLM
     # ------------------------------------------------------------------
     def _create_summary(self, messages_to_summarize: list[AnyMessage]) -> str:
-        """메시지를 LLM에 보내 요약 텍스트를 생성합니다."""
+        """Send messages to an LLM to generate a summary text."""
         return ""
 
     # ------------------------------------------------------------------
-    # TODO 3: 점진적 요약 패턴을 조립하세요
+    # TODO 3: Assemble the incremental summarization pattern
     # ------------------------------------------------------------------
     def before_model(
         self, state: AgentState[Any], runtime: Runtime[ContextT]
     ) -> dict[str, Any] | None:
-        """모델 호출 전에 실행되어, 필요하면 오래된 메시지를 요약으로 교체합니다."""
+        """Runs before the model call, replacing old messages with a summary if needed."""
         return None
