@@ -38,15 +38,15 @@ from ax_advanced_class.src.middleware._internals.todo_helpers import (
 
 class Todo(TypedDict):
     """A single todo item with content and status."""
-
-    content: str
-    status: Literal["pending", "in_progress", "completed"]
+    # TODO 1a: content(str)와 status(Literal["pending", "in_progress", "completed"]) 필드를 정의하세요
+    pass
 
 
 class PlanningState(AgentState[ResponseT]):
     """State schema for the todo middleware."""
-
-    todos: Annotated[NotRequired[list[Todo]], OmitFromInput]
+    # TODO 1b: todos 필드를 추가하세요
+    #   todos: Annotated[NotRequired[list[Todo]], OmitFromInput]
+    pass
 
 
 # ===========================================================================
@@ -60,14 +60,19 @@ def _write_todos(
     runtime: ToolRuntime[ContextT, PlanningState[ResponseT]], todos: list[Todo]
 ) -> Command[Any]:
     """Create and manage a structured task list for your current work session."""
-    return Command(
-        update={
-            "todos": todos,
-            "messages": [
-                ToolMessage(f"Updated todo list to {todos}", tool_call_id=runtime.tool_call_id)
-            ],
-        }
-    )
+    # TODO 2: todo 리스트를 state에 업데이트하는 Command를 반환하세요
+    #
+    # Command(update={...})를 사용하여:
+    #   1. "todos" 키에 새 todo 리스트를 설정
+    #   2. "messages" 키에 ToolMessage를 추가 (LLM이 결과를 볼 수 있도록)
+    #      힌트: ToolMessage(content=f"Updated todo list to {todos}",
+    #                        tool_call_id=runtime.tool_call_id)
+    #
+    # 왜 Command인가?
+    #   일반 tool은 문자열을 반환하지만, state를 수정해야 하는 tool은
+    #   Command를 반환해야 LangGraph의 state reducer를 통해 업데이트됩니다.
+    #
+    return Command(update={})
 
 
 # ===========================================================================
@@ -80,34 +85,16 @@ def _write_todos(
 # - "in_progress는 한 번에 1개만"
 # - 완료 조건 (에러 없이 끝났을 때만 completed)
 
-WRITE_TODOS_TOOL_DESCRIPTION = """Use this tool to create and manage a structured task list for your current work session.
-
-Only use this tool if you think it will be helpful in staying organized. If the user's request is trivial and takes less than 3 steps, just do the task directly.
-
-## When to Use
-1. Complex multi-step tasks (3+ distinct steps)
-2. User provides multiple tasks
-3. The plan may need future revisions based on results
-
-## When NOT to Use
-1. Single, straightforward task
-2. Task can be completed in less than 3 trivial steps
-3. Purely conversational or informational task
-
-## How to Use
-1. Mark current task as "in_progress" BEFORE starting work
-2. Mark task as "completed" IMMEDIATELY after finishing
-3. Each call replaces the entire todo list — always provide the complete list
-
-## Task States
-- pending: Not yet started
-- in_progress: Currently working on (limit to ONE at a time)
-- completed: Finished successfully
-
-## Completion Rules
-- ONLY mark completed when FULLY accomplished with no errors
-- If blocked, keep as in_progress and create a new task for the blocker
-- Never skip status updates — the UI depends on accurate tracking"""
+WRITE_TODOS_TOOL_DESCRIPTION = ""
+# TODO 3: write_todos 도구의 설명을 작성하세요
+#
+# 포함할 내용:
+# - When to Use (3+ step의 복잡한 작업)
+# - When NOT to Use (단순 작업)
+# - How to Use (전체 리스트 교체 방식)
+# - Task States (pending, in_progress, completed)
+# - "in_progress는 한 번에 1개만"
+# - 완료 조건 (에러 없이 끝났을 때만 completed)
 
 
 # ===========================================================================
@@ -138,19 +125,22 @@ class TodoListMiddleware(TodoListMiddlewareBase):
         system_prompt: str = WRITE_TODOS_SYSTEM_PROMPT,
         tool_description: str = WRITE_TODOS_TOOL_DESCRIPTION,
     ) -> None:
-        super().__init__()
-        self.system_prompt = system_prompt
-        self.tool_description = tool_description
-
-        self.tools = [
-            StructuredTool.from_function(
-                name="write_todos",
-                description=tool_description,
-                func=_write_todos,
-                args_schema=WriteTodosInput,
-                infer_schema=False,
-            )
-        ]
+        # TODO 4: middleware를 초기화하세요
+        #
+        # Step 1: super().__init__() 호출
+        #
+        # Step 2: system_prompt와 tool_description을 인스턴스 변수로 저장
+        #
+        # Step 3: self.tools에 write_todos tool 등록 ← Tool 축
+        #   힌트: StructuredTool.from_function(
+        #       name="write_todos",
+        #       description=tool_description,
+        #       func=_write_todos,
+        #       args_schema=WriteTodosInput,
+        #       infer_schema=False,
+        #   )
+        #
+        pass
 
     # =======================================================================
     # TODO 5: system prompt에 todo 사용법을 추가하세요
@@ -165,14 +155,21 @@ class TodoListMiddleware(TodoListMiddlewareBase):
         request: ModelRequest[ContextT],
         handler: Callable[[ModelRequest[ContextT]], ModelResponse[ResponseT]],
     ) -> ModelResponse[ResponseT] | AIMessage:
-        if request.system_message is not None:
-            new_system_content = [
-                *request.system_message.content_blocks,
-                {"type": "text", "text": f"\n\n{self.system_prompt}"},
-            ]
-        else:
-            new_system_content = [{"type": "text", "text": self.system_prompt}]
-        new_system_message = SystemMessage(
-            content=cast("list[str | dict[str, str]]", new_system_content)
-        )
-        return handler(request.override(system_message=new_system_message))
+        # TODO 5: system prompt에 todo 사용법을 추가하세요
+        #
+        # Step 1: 기존 system message가 있는지 확인
+        #   request.system_message is not None
+        #
+        # Step 2: 기존 content blocks에 self.system_prompt 추가
+        #   new_system_content = [
+        #       *request.system_message.content_blocks,
+        #       {"type": "text", "text": f"\n\n{self.system_prompt}"},
+        #   ]
+        #
+        # Step 3: SystemMessage로 감싸기
+        #   new_system_message = SystemMessage(content=new_system_content)
+        #
+        # Step 4: request.override(system_message=new_system_message)로
+        #         수정된 request를 handler에 전달
+        #
+        return handler(request)  # ← 수정 필요

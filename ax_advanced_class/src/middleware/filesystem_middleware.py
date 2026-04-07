@@ -66,7 +66,7 @@ class FilesystemMiddleware(FilesystemMiddlewareBase):
         # StructuredTool 생성은 부모 클래스가 자동으로 처리합니다.
         # 여기서는 설명 문자열만 반환하면 됩니다.
         #
-        return self._custom_tool_descriptions.get("edit_file") or EDIT_FILE_TOOL_DESCRIPTION
+        return ""
 
     # ------------------------------------------------------------------
     # TODO 2: 시스템 프롬프트 주입 + 도구 필터링
@@ -85,36 +85,6 @@ class FilesystemMiddleware(FilesystemMiddlewareBase):
         #   없으면 FILESYSTEM_SYSTEM_PROMPT + (execute 가능하면 EXECUTION_SYSTEM_PROMPT)
         # Step 4: append_to_system_message()로 시스템 메시지에 추가
         # Step 5: return handler(request)
-        has_execute_tool = any(
-            (tool.name if hasattr(tool, "name") else tool.get("name")) == "execute"
-            for tool in request.tools
-        )
-
-        backend_supports_execution = False
-        if has_execute_tool:
-            backend = self._get_backend(request.runtime)
-            backend_supports_execution = _supports_execution(backend)
-
-            if not backend_supports_execution:
-                filtered_tools = [
-                    tool for tool in request.tools
-                    if (tool.name if hasattr(tool, "name") else tool.get("name")) != "execute"
-                ]
-                request = request.override(tools=filtered_tools)
-                has_execute_tool = False
-
-        if self._custom_system_prompt is not None:
-            system_prompt = self._custom_system_prompt
-        else:
-            prompt_parts = [FILESYSTEM_SYSTEM_PROMPT]
-            if has_execute_tool and backend_supports_execution:
-                prompt_parts.append(EXECUTION_SYSTEM_PROMPT)
-            system_prompt = "\n\n".join(prompt_parts).strip()
-
-        if system_prompt:
-            new_system_message = append_to_system_message(request.system_message, system_prompt)
-            request = request.override(system_message=new_system_message)
-
         return handler(request)
 
     # ------------------------------------------------------------------
@@ -131,9 +101,4 @@ class FilesystemMiddleware(FilesystemMiddlewareBase):
         # Step 2: tool name이 TOOLS_EXCLUDED_FROM_EVICTION에 있으면 → 그대로 handler(request)
         # Step 3: tool_result = handler(request)
         # Step 4: return self._intercept_large_tool_result(tool_result, request.runtime)
-        if self._tool_token_limit_before_evict is None or request.tool_call["name"] in TOOLS_EXCLUDED_FROM_EVICTION:
-            return handler(request)
-
-        tool_result = handler(request)
-
-        return self._intercept_large_tool_result(tool_result, request.runtime)
+        return handler(request)

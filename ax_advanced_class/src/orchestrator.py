@@ -118,32 +118,30 @@ class LongRunningOrchestrator:
 
     def _build_workflow(self) -> CompiledStateGraph:
         """Build the LangGraph workflow: START -> router -> [agent] -> router -> ... -> END"""
-        workflow = StateGraph(OrchestratorState)
-
-        # Add nodes
-        workflow.add_node("router", self._router_node)
-        workflow.add_node("initializer", self._initializer_node)
-        workflow.add_node("coding", self._coding_node)
-
-        # Entry point
-        workflow.add_edge(START, "router")
-
-        # Conditional routing from router
-        workflow.add_conditional_edges(
-            "router",
-            self._route_decision,
-            {
-                AgentRoute.INITIALIZER: "initializer",
-                AgentRoute.CODING: "coding",
-                AgentRoute.FINISH: END,
-            },
-        )
-
-        # After agents complete, end the workflow
-        workflow.add_edge("initializer", END)
-        workflow.add_edge("coding", END)
-
-        return workflow.compile(checkpointer=self.checkpointer)
+        # TODO 1: StateGraph를 조립하세요
+        #
+        # Step 1: StateGraph(OrchestratorState)로 그래프 생성
+        #
+        # Step 2: 노드 3개 추가
+        #   - "router" → self._router_node
+        #   - "initializer" → self._initializer_node
+        #   - "coding" → self._coding_node
+        #   힌트: workflow.add_node("이름", 함수)
+        #
+        # Step 3: 엣지 연결
+        #   - START → "router" (Normal Edge)
+        #   - "router" → 조건부 분기 (Conditional Edge)
+        #     분기 함수: self._route_decision
+        #     매핑: AgentRoute.INITIALIZER → "initializer"
+        #           AgentRoute.CODING → "coding"
+        #           AgentRoute.FINISH → END
+        #   - "initializer" → END (Normal Edge)
+        #   - "coding" → END (Normal Edge)
+        #   힌트: add_edge(), add_conditional_edges()
+        #
+        # Step 4: compile(checkpointer=self.checkpointer)
+        #
+        return  # CompiledStateGraph
 
     def _to_str(self, value: Any) -> str:
         """Safely convert any value to string."""
@@ -160,37 +158,40 @@ class LongRunningOrchestrator:
         Uses structured output from the LLM to make routing decisions.
         All complex logic is delegated to the specialized agents.
         """
-        messages = state.get("messages", [])
-
-        structured_llm = self.llm.with_structured_output(RouterDecision)
-        decision: RouterDecision = structured_llm.invoke(
-            [
-                {"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT},
-                *messages,
-            ]
-        )
-
-        route_map = {
-            "initializer": AgentRoute.INITIALIZER,
-            "coding": AgentRoute.CODING,
-            "finish": AgentRoute.FINISH,
-        }
-
-        route = route_map.get(decision.route, AgentRoute.FINISH)
-
-        if decision.response:
-            message_content = decision.response
-        else:
-            message_content = f"Routing to {decision.route}: {decision.reason}"
-
-        return {
-            "next_agent": route,
-            "messages": [AIMessage(content=message_content)],
-        }
+        # TODO 2: LLM으로 라우팅 결정을 내리세요
+        #
+        # Step 1: state에서 messages 추출
+        #
+        # Step 2: with_structured_output(RouterDecision)으로 LLM 감싸기
+        #   structured_llm = self.llm.with_structured_output(RouterDecision)
+        #
+        # Step 3: LLM 호출
+        #   입력: [{"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT}, *messages]
+        #   힌트: structured_llm.invoke([...])
+        #   결과: RouterDecision 객체 (decision.route, decision.reason, decision.response)
+        #
+        # Step 4: decision.route를 AgentRoute enum으로 변환
+        #   "initializer" → AgentRoute.INITIALIZER
+        #   "coding" → AgentRoute.CODING
+        #   "finish" → AgentRoute.FINISH
+        #
+        # Step 5: 반환값 구성
+        #   return {
+        #       "next_agent": route,
+        #       "messages": [AIMessage(content=적절한_메시지)],
+        #   }
+        #   힌트: decision.response가 있으면 그걸 사용, 없으면 reason 사용
+        #
+        return {}
 
     def _route_decision(self, state: OrchestratorState) -> AgentRoute:
         """Extract routing decision from state."""
-        return state.get("next_agent", AgentRoute.FINISH)
+        # TODO 3: state에서 next_agent를 추출하여 반환하세요
+        #
+        # 힌트: state.get("next_agent", 기본값)
+        # next_agent가 없으면 AgentRoute.FINISH를 기본값으로
+        #
+        return  # AgentRoute
 
     def _initializer_node(self, state: OrchestratorState) -> dict:
         """
@@ -207,13 +208,25 @@ class LongRunningOrchestrator:
         """
         Coding agent node.
         """
-        result = self.coding_agent.invoke(
-            {
-                "messages": state.get("messages", []),
-                "todos": [],
-            }
-        )
-        return {"messages": [AIMessage(content=result["messages"][-1].content)]}
+        # TODO 4: coding 에이전트를 실행하고 결과를 반환하세요
+        #
+        # Step 1: 오케스트레이터 state에서 messages 추출
+        #
+        # Step 2: 에이전트 입력 구성
+        #   coding 에이전트는 messages 외에 todos도 필요합니다
+        #   {"messages": messages, "todos": []}
+        #
+        # Step 3: self.coding_agent.invoke(agent_input) 실행
+        #
+        # Step 4: 에이전트의 최종 응답만 오케스트레이터로 반환
+        #   에이전트는 수십 턴의 대화를 할 수 있지만,
+        #   오케스트레이터에는 마지막 메시지만 돌려줍니다
+        #   return {"messages": [AIMessage(content=마지막_메시지)]}
+        #
+        #   왜? → 에이전트의 전체 대화를 오케스트레이터에 넣으면
+        #         컨텍스트 윈도우가 오염됩니다
+        #
+        return {"messages": []}
 
     def invoke(
         self,

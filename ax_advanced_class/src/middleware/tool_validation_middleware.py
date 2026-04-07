@@ -67,48 +67,7 @@ class _BashValidator(_BashValidatorBase):
         # Step 5: 각 파싱 명령어에 self._validate_parsed_command() 호출
         #         -> DENY면 즉시 반환, 아니면 results 리스트에 추가
         # Step 6: self._get_highest_priority_result(results, command)
-        # Step 1: 빈 명령어
-        if not command or not command.strip():
-            return CommandValidationResult(
-                level=PermissionLevel.ALLOW,
-                command=command,
-                reason="Empty command",
-            )
-
-        # Step 2: 원시 패턴 차단 (파싱 전)
-        for pattern in self.config.blocked_raw_patterns:
-            if pattern in command:
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=command,
-                    reason="Command contains blocked pattern",
-                    blocked_items=[pattern],
-                )
-
-        # Step 3: PermissionRule 기반 매칭
-        rule_result = self._check_rules(command)
-        if rule_result:
-            return rule_result
-
-        # Step 4: 명령어 파싱
-        parsed_commands = self._parser.parse(command)
-        if not parsed_commands:
-            return CommandValidationResult(
-                level=PermissionLevel.DENY,
-                command=command,
-                reason="Could not parse command structure",
-            )
-
-        # Step 5: 각 파싱된 명령어 검증
-        results: List[CommandValidationResult] = []
-        for parsed in parsed_commands:
-            result = self._validate_parsed_command(parsed)
-            results.append(result)
-            if result.level == PermissionLevel.DENY:
-                return result
-
-        # Step 6: 최종 결과
-        return self._get_highest_priority_result(results, command)
+        return CommandValidationResult(level=PermissionLevel.ASK, command=command, reason="")
 
     def validate_path(self, path: str, is_write: bool = True) -> CommandValidationResult:
         """
@@ -134,52 +93,7 @@ class _BashValidator(_BashValidatorBase):
         # Step 5: 위 어디에도 해당 안 되면 (외부 경로):
         #         -> is_write이면 ASK (reason에 normalized 경로 포함)
         #         -> !is_write이면 ALLOW
-        # Step 1: 빈 경로
-        if not path:
-            return CommandValidationResult(
-                level=PermissionLevel.ALLOW,
-                command=path,
-                reason="Empty path defaults to workspace",
-            )
-
-        # Step 2: 경로 정규화
-        normalized = os.path.abspath(os.path.expanduser(path))
-
-        # Step 3: 차단 경로 체크
-        for blocked in self.config.blocked_paths:
-            blocked_abs = os.path.abspath(blocked)
-            if normalized.startswith(blocked_abs):
-                return CommandValidationResult(
-                    level=PermissionLevel.DENY,
-                    command=path,
-                    reason=f"Path is in blocked directory: {blocked}",
-                    blocked_items=[blocked],
-                )
-
-        # Step 4: 허용 경로 체크
-        allowed_roots = [self.config.workspace_root] + self.config.allowed_paths
-        for allowed in allowed_roots:
-            allowed_abs = os.path.abspath(os.path.expanduser(allowed))
-            if normalized == allowed_abs or normalized.startswith(allowed_abs + os.sep):
-                return CommandValidationResult(
-                    level=PermissionLevel.ALLOW,
-                    command=path,
-                    reason=f"Path is in allowed directory: {allowed}",
-                )
-
-        # Step 5: 외부 경로 — 읽기/쓰기 구분
-        if is_write:
-            return CommandValidationResult(
-                level=PermissionLevel.ASK,
-                command=path,
-                reason=f"Write to external path requires approval: {normalized}",
-            )
-        else:
-            return CommandValidationResult(
-                level=PermissionLevel.ALLOW,
-                command=path,
-                reason="Read from external path is allowed",
-            )
+        return CommandValidationResult(level=PermissionLevel.ASK, command=path, reason="")
 
 
 class ToolValidationMiddleware(ToolValidationMiddlewareBase):
@@ -230,41 +144,7 @@ class ToolValidationMiddleware(ToolValidationMiddlewareBase):
                 #       - interrupt() 호출 (question, tool_call_id, command, tool_name, allow_rule 포함)
                 #       - response == "always" -> self._add_allow_rule(tool_name, command)
                 #       - response가 falsy 또는 "deny:"로 시작 -> ToolMessage(status="error") 반환
-                self._enforce_timeout_limits(args)
-
-                if "command" in args:
-                    result = self._validator.validate_command(args["command"])
-
-                    if result.level == PermissionLevel.DENY:
-                        return ToolMessage(
-                            content=f"Error: Command denied. {result.reason}",
-                            tool_call_id=tool_call_id,
-                            status="error",
-                        )
-
-                    if result.level == PermissionLevel.ASK:
-                        command = args["command"]
-                        if not self._is_allowed(tool_name, command):
-                            cmd_prefix = command.split()[0] if command.strip() else command
-                            response = interrupt(
-                                {
-                                    "question": f"Command '{command}' requires confirmation",
-                                    "tool_call_id": tool_call_id,
-                                    "command": command,
-                                    "tool_name": tool_name,
-                                    "allow_rule": f"{tool_name}({cmd_prefix}:*)",
-                                }
-                            )
-                            if response == "always":
-                                self._add_allow_rule(tool_name, command)
-                            elif not response or (isinstance(response, str) and response.startswith("deny:")):
-                                feedback = response[5:] if isinstance(response, str) and response.startswith("deny:") else ""
-                                reason = f"User feedback: {feedback}" if feedback else result.reason
-                                return ToolMessage(
-                                    content=f"Error: Command denied. {reason}",
-                                    tool_call_id=tool_call_id,
-                                    status="error",
-                                )
+                pass
 
             # --- File Tool Validation ---
             elif tool_name in _FILE_TOOL_NAMES:
@@ -288,75 +168,7 @@ class ToolValidationMiddleware(ToolValidationMiddlewareBase):
                 #       -> ToolMessage(status="error") "You must read the file first..."
                 #   B3. 파일 존재 + os.path.getmtime > self._read_files[normalized_path]
                 #       -> ToolMessage(status="error") "File has been modified since..."
-                if "file_path" in args or "path" in args or "validated_path" in args:
-                    path_key = "file_path" if "file_path" in args else ("validated_path" if "validated_path" in args else "path")
-                    path = args[path_key]
-
-                    if not os.path.isabs(path):
-                        path = os.path.join(self._config.workspace_root, path)
-
-                    normalized_path = self._validator.get_normalized_path(path)
-                    is_write = tool_name in _WRITE_FILE_TOOLS
-
-                    result = self._validator.validate_path(path, is_write=is_write)
-
-                    if result.level == PermissionLevel.DENY:
-                        return ToolMessage(
-                            content=f"Error: Path denied. {result.reason}",
-                            tool_call_id=tool_call_id,
-                            status="error",
-                        )
-
-                    if result.level == PermissionLevel.ASK:
-                        if not self._is_allowed(tool_name, normalized_path):
-                            parent_dir = os.path.dirname(normalized_path)
-                            response = interrupt(
-                                {
-                                    "question": f"Path '{normalized_path}' requires confirmation",
-                                    "tool_call_id": tool_call_id,
-                                    "path": normalized_path,
-                                    "tool_name": tool_name,
-                                    "allow_rule": f"{tool_name}({parent_dir}:*)",
-                                }
-                            )
-                            if response == "always":
-                                self._allow_rules.append(
-                                    PermissionRule(tool_name=tool_name, pattern=f"{parent_dir}:*")
-                                )
-                            elif not response or (isinstance(response, str) and response.startswith("deny:")):
-                                feedback = response[5:] if isinstance(response, str) and response.startswith("deny:") else ""
-                                reason = f"User feedback: {feedback}" if feedback else result.reason
-                                return ToolMessage(
-                                    content=f"Error: Path denied. {reason}",
-                                    tool_call_id=tool_call_id,
-                                    status="error",
-                                )
-
-                    # Read-before-write check
-                    if is_write:
-                        file_exists = os.path.exists(normalized_path)
-                        if file_exists:
-                            if normalized_path not in self._read_files:
-                                operation = "writing to" if tool_name == "write_file" else "editing"
-                                return ToolMessage(
-                                    content=f"Error: You must read the file first before {operation} it. Use the read_file tool first.",
-                                    tool_call_id=tool_call_id,
-                                    status="error",
-                                )
-                            try:
-                                current_mtime = os.path.getmtime(normalized_path)
-                                read_mtime = self._read_files[normalized_path]
-                                if current_mtime > read_mtime:
-                                    operation = "writing to" if tool_name == "write_file" else "editing"
-                                    return ToolMessage(
-                                        content=f"Error: File has been modified since you last read it. Please read the file again before {operation} it.",
-                                        tool_call_id=tool_call_id,
-                                        status="error",
-                                    )
-                            except OSError:
-                                pass
-
-                    args[path_key] = normalized_path
+                pass
 
             # --- Execute handler + post-processing ---
             handler_result = handler(request)

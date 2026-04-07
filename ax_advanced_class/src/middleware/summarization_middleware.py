@@ -68,29 +68,6 @@ class SummarizationMiddleware(SummarizationMiddlewareBase):
             하나라도 True면 압축 필요. 모든 조건이 False면 압축 불필요.
             self._trigger_conditions 가 비어있으면 항상 False 를 반환합니다.
         """
-        if not self._trigger_conditions:
-            return False
-
-        for kind, value in self._trigger_conditions:
-            if kind == "messages" and len(messages) >= value:
-                return True
-            if kind == "tokens" and total_tokens >= value:
-                return True
-            if kind == "tokens" and self._should_summarize_based_on_reported_tokens(
-                messages, value
-            ):
-                return True
-            if kind == "fraction":
-                max_input_tokens = self._get_profile_limits()
-                if max_input_tokens is None:
-                    continue
-                threshold = int(max_input_tokens * value)
-                if threshold <= 0:
-                    threshold = 1
-                if total_tokens >= threshold:
-                    return True
-                if self._should_summarize_based_on_reported_tokens(messages, threshold):
-                    return True
         return False
 
     # ------------------------------------------------------------------
@@ -98,23 +75,7 @@ class SummarizationMiddleware(SummarizationMiddlewareBase):
     # ------------------------------------------------------------------
     def _create_summary(self, messages_to_summarize: list[AnyMessage]) -> str:
         """메시지를 LLM에 보내 요약 텍스트를 생성합니다."""
-        if not messages_to_summarize:
-            return "No previous conversation history."
-
-        trimmed_messages = self._trim_messages_for_summary(messages_to_summarize)
-        if not trimmed_messages:
-            return "Previous conversation was too long to summarize."
-
-        formatted_messages = get_buffer_string(trimmed_messages)
-
-        try:
-            response = self.model.invoke(
-                self.summary_prompt.format(messages=formatted_messages).rstrip(),
-                config={"metadata": {"lc_source": "summarization"}},
-            )
-            return response.text.strip()
-        except Exception as e:
-            return f"Error generating summary: {e!s}"
+        return ""
 
     # ------------------------------------------------------------------
     # TODO 3: 점진적 요약 패턴을 조립하세요
@@ -123,27 +84,4 @@ class SummarizationMiddleware(SummarizationMiddlewareBase):
         self, state: AgentState[Any], runtime: Runtime[ContextT]
     ) -> dict[str, Any] | None:
         """모델 호출 전에 실행되어, 필요하면 오래된 메시지를 요약으로 교체합니다."""
-        messages = state["messages"]
-        self._ensure_message_ids(messages)
-
-        total_tokens = self.token_counter(messages)
-        if not self._should_summarize(messages, total_tokens):
-            return None
-
-        cutoff_index = self._determine_cutoff_index(messages)
-
-        if cutoff_index <= 0:
-            return None
-
-        messages_to_summarize, preserved_messages = self._partition_messages(messages, cutoff_index)
-
-        summary = self._create_summary(messages_to_summarize)
-        new_messages = self._build_new_messages(summary)
-
-        return {
-            "messages": [
-                RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                *new_messages,
-                *preserved_messages,
-            ]
-        }
+        return None

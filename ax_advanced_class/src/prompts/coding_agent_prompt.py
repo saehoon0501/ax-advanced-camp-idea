@@ -158,31 +158,29 @@ def coding_agent_dynamic_prompt(request: ModelRequest) -> str:
     #      - 완료 즉시 상태 업데이트
     #
     dynamic_content = f"""
-
 # CURRENT SESSION CONTEXT
 
-Workspace: {workspace}
+Workspace: ???
 (All file operations should be relative to this directory)
 
-todos: {state.get("todos", [])}
+todos: ???
+"""
 
-# PLANNING & PROGRESS TRACKING
-
-CRITICAL: You MUST use the write_todos tool to plan and track your work:
-
-1. **Before Starting**: Break down your work into specific todo items using write_todos tool
-   - Each todo item should be a discrete, completable task
-   - Order items logically based on dependencies
-
-2. **During Execution**: Update todos status as you work
-   - Mark current task as "in_progress" BEFORE starting it
-   - Mark task as "completed" IMMEDIATELY after finishing it
-   - Only have ONE task "in_progress" at a time
-
-3. **Progress Indication**: The todos provides visibility to the user
-   - Users can see what you're working on and overall progress
-   - Always keep the todos synchronized with your actual progress
-
-Start your session by following PHASE 1 (Recovery & Orientation) as described above."""
-
-    return CODING_AGENT_SYSTEM_PROMPT + SOFT_RULES_PROMPT + dynamic_content
+    # TODO 2: 프롬프트 합성 순서를 결정하세요
+    #
+    # 사용 가능한 변수:
+    #   CODING_AGENT_SYSTEM_PROMPT  — 정적 시스템 프롬프트 (이미 제공됨)
+    #   SOFT_RULES_PROMPT           — git 안전, 코드 품질 등 소프트 규칙
+    #   dynamic_content             — TODO 1에서 구성한 런타임 컨텍스트
+    #
+    # 순서가 왜 중요한가?
+    #   LLM provider는 시스템 프롬프트의 "접두사(prefix)"를 캐시합니다.
+    #   변하지 않는 부분을 앞에 놓으면 → 캐시 적중 → 비용/지연 절감
+    #   변하는 부분을 앞에 놓으면 → 매번 전체 재처리 → 비용/지연 증가
+    #
+    # 올바른 순서:
+    #   1. ???  ← 절대 안 변하는 것 (Agent 역할, 규칙)
+    #   2. ???  ← 거의 안 변하는 것 (소프트 규칙)
+    #   3. ???  ← 매번 변하는 것 (현재 workspace, todos)
+    #
+    return ""
