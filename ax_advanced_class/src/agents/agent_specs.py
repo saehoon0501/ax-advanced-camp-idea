@@ -59,11 +59,14 @@ def coding_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
 
 
 def initializer_agent_spec(config: PermissionConfig | None = None) -> AgentSpec:
+    from langchain.agents.middleware import TodoListMiddleware as LangChainTodoListMiddleware
+
     if config is None:
         config = PermissionConfig()
     agent_middleware = [
         ToolValidationMiddleware(config),
         _create_filesystem_middleware(config),
+        LangChainTodoListMiddleware(),
         SummarizationMiddleware(
             model="anthropic:claude-haiku-4-5-20251001",
             trigger=("tokens", 60000),
