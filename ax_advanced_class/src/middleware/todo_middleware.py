@@ -1,7 +1,7 @@
 """Planning and task management middleware for agents.
 
 This is a learning file for implementing TodoListMiddleware.
-Complete the 5 TODOs in order.
+Complete the 3 TODOs in order.
 """
 
 from collections.abc import Callable
@@ -29,28 +29,23 @@ from ax_advanced_class.src.middleware._internals.todo_helpers import (
 )
 
 # ===========================================================================
-# TODO 1: Define the Todo type and PlanningState
+# Pre-provided: Todo type and PlanningState
 # ===========================================================================
-# Todo: TypedDict — content: str, status: Literal["pending", "in_progress", "completed"]
-# PlanningState: Extend AgentState[ResponseT] by adding a todos field
-#   todos: Annotated[NotRequired[list[Todo]], OmitFromInput]
 
 
 class Todo(TypedDict):
     """A single todo item with content and status."""
-    # TODO 1a: Define the content (str) and status (Literal["pending", "in_progress", "completed"]) fields
-    pass
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
 
 
 class PlanningState(AgentState[ResponseT]):
     """State schema for the todo middleware."""
-    # TODO 1b: Add the todos field
-    #   todos: Annotated[NotRequired[list[Todo]], OmitFromInput]
-    pass
+    todos: Annotated[NotRequired[list[Todo]], OmitFromInput]
 
 
 # ===========================================================================
-# TODO 2: Return a Command that updates the todo list in state
+# TODO 1: Return a Command that updates the todo list in state
 # ===========================================================================
 # Command(update={"todos": todos, "messages": [ToolMessage(...)]})
 # The ToolMessage must include runtime.tool_call_id
@@ -60,7 +55,7 @@ def _write_todos(
     runtime: ToolRuntime[ContextT, PlanningState[ResponseT]], todos: list[Todo]
 ) -> Command[Any]:
     """Create and manage a structured task list for your current work session."""
-    # TODO 2: Return a Command that updates the todo list in state
+    # TODO 1: Return a Command that updates the todo list in state
     #
     # Using Command(update={...}):
     #   1. Set the new todo list on the "todos" key
@@ -76,29 +71,34 @@ def _write_todos(
 
 
 # ===========================================================================
-# TODO 3: Write the description for the write_todos tool
+# Pre-provided: write_todos tool description
 # ===========================================================================
-# Include:
-# - When to Use (complex tasks with 3+ steps)
-# - When NOT to Use (simple tasks)
-# - Task States (pending, in_progress, completed)
-# - "Only 1 in_progress at a time"
-# - Completion criteria (mark completed only when finished without errors)
 
-WRITE_TODOS_TOOL_DESCRIPTION = ""
-# TODO 3: Write the description for the write_todos tool
-#
-# Include:
-# - When to Use (complex tasks with 3+ steps)
-# - When NOT to Use (simple tasks)
-# - How to Use (full list replacement approach)
-# - Task States (pending, in_progress, completed)
-# - "Only 1 in_progress at a time"
-# - Completion criteria (mark completed only when finished without errors)
+WRITE_TODOS_TOOL_DESCRIPTION = """Create and manage a todo list to track progress on complex tasks.
+
+When to Use:
+- Tasks requiring 3+ steps
+- When the user requests multiple related changes
+- Do NOT use for simple, single-step tasks
+
+How to Use:
+- Before starting a task: mark it as in_progress
+- After completing a task: immediately mark it as completed
+- Always provide the FULL list (this replaces the existing list entirely)
+
+Task States:
+- pending: not yet started
+- in_progress: currently being worked on (EXACTLY ONE at a time!)
+- completed: finished successfully
+
+Completion Rules:
+- Only mark completed when fully done with no errors
+- If blocked or errored, keep as in_progress
+"""
 
 
 # ===========================================================================
-# TODO 4 & 5: TodoListMiddleware class
+# TODO 2 & 3: TodoListMiddleware class
 # ===========================================================================
 
 
@@ -111,7 +111,7 @@ class TodoListMiddleware(TodoListMiddlewareBase):
     state_schema = PlanningState  # type: ignore[assignment]
 
     # =======================================================================
-    # TODO 4: Initialize the middleware
+    # TODO 2: Initialize the middleware
     # =======================================================================
     # Step 1: super().__init__()
     # Step 2: Save self.system_prompt, self.tool_description
@@ -125,7 +125,7 @@ class TodoListMiddleware(TodoListMiddlewareBase):
         system_prompt: str = WRITE_TODOS_SYSTEM_PROMPT,
         tool_description: str = WRITE_TODOS_TOOL_DESCRIPTION,
     ) -> None:
-        # TODO 4: Initialize the middleware
+        # TODO 2: Initialize the middleware
         #
         # Step 1: Call super().__init__()
         #
@@ -143,7 +143,7 @@ class TodoListMiddleware(TodoListMiddlewareBase):
         pass
 
     # =======================================================================
-    # TODO 5: Add todo usage instructions to the system prompt
+    # TODO 3: Add todo usage instructions to the system prompt
     # =======================================================================
     # Step 1: If request.system_message exists, add to content_blocks; otherwise create new
     #   Format: {"type": "text", "text": f"\n\n{self.system_prompt}"}
@@ -155,7 +155,7 @@ class TodoListMiddleware(TodoListMiddlewareBase):
         request: ModelRequest[ContextT],
         handler: Callable[[ModelRequest[ContextT]], ModelResponse[ResponseT]],
     ) -> ModelResponse[ResponseT] | AIMessage:
-        # TODO 5: Add todo usage instructions to the system prompt
+        # TODO 3: Add todo usage instructions to the system prompt
         #
         # Step 1: Check if an existing system message exists
         #   request.system_message is not None
