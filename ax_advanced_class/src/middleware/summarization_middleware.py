@@ -75,7 +75,27 @@ class SummarizationMiddleware(SummarizationMiddlewareBase):
     # TODO 2: Summarize the message list using an LLM
     # ------------------------------------------------------------------
     def _create_summary(self, messages_to_summarize: list[AnyMessage]) -> str:
-        """Send messages to an LLM to generate a summary text."""
+        """Send messages to an LLM to generate a summary text.
+
+        Hints — implement in this order:
+            Step 1: If messages_to_summarize is empty,
+                    return "No previous conversation history."
+
+            Step 2: Trim messages with self._trim_messages_for_summary(messages_to_summarize).
+                    If the result is empty, return "Previous conversation was too long to summarize."
+
+            Step 3: Convert to a plain string with get_buffer_string(trimmed_messages).
+                    (Using str() on message objects includes metadata → wastes tokens.)
+
+            Step 4: Build the final prompt:
+                    self.summary_prompt.format(messages=formatted_messages)
+
+            Step 5: Call self.model.invoke(formatted_prompt) and extract
+                    the text with response.text.strip().
+
+            Step 6: Wrap everything in try/except — a summary failure must NOT
+                    crash the agent.  Return "Error generating summary: {e}" on error.
+        """
         return ""
 
     # ------------------------------------------------------------------
@@ -84,5 +104,30 @@ class SummarizationMiddleware(SummarizationMiddlewareBase):
     def before_model(
         self, state: AgentState[Any], runtime: Runtime[ContextT]
     ) -> dict[str, Any] | None:
-        """Runs before the model call, replacing old messages with a summary if needed."""
+        """Runs before the model call, replacing old messages with a summary if needed.
+
+        Hints — implement in this order:
+            Step 1: Extract messages from state["messages"].
+                    Call self._ensure_message_ids(messages) so RemoveMessage works.
+
+            Step 2: Count tokens: total_tokens = self.token_counter(messages)
+
+            Step 3: Call self._should_summarize(messages, total_tokens).
+                    If False, return None (no compaction needed).
+
+            Step 4: Determine the cutoff index:
+                    cutoff_index = self._determine_cutoff_index(messages)
+                    If cutoff_index <= 0, return None (nothing to summarize).
+
+            Step 5: Split messages:
+                    messages_to_summarize, preserved = self._partition_messages(messages, cutoff_index)
+
+            Step 6: Generate summary: summary = self._create_summary(messages_to_summarize)
+
+            Step 7: Build new messages: new_messages = self._build_new_messages(summary)
+
+            Step 8: Return the compacted state:
+                    {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages, *preserved]}
+                    RemoveMessage clears all existing messages first, then adds summary + preserved.
+        """
         return None

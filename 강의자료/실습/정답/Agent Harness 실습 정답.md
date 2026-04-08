@@ -1,18 +1,18 @@
 # Agent Harness 실습 정답
 
-이 문서는 Agent Harness 실습의 8개 TODO에 대한 정답과 해설입니다.
+이 문서는 Agent Harness 실습의 5개 TODO에 대한 정답과 해설입니다.
 
 **구현 파일:**
-- `ax_advanced_class/src/middleware/todo_middleware.py` (TODO 1-5)
-- `ax_advanced_class/src/prompts/coding_agent_prompt.py` (TODO 6-8)
+- `ax_advanced_class/src/middleware/todo_middleware.py` (TODO 1-3)
+- `ax_advanced_class/src/prompts/coding_agent_prompt.py` (TODO 4-5)
 
 ---
 
 # Part 1: TodoListMiddleware 구현
 
-## TODO 1: `Todo` TypedDict + `PlanningState`
+## 사전 제공 코드 해설: `Todo` TypedDict + `PlanningState`
 
-### 정답 코드
+### 코드
 
 ```python
 class Todo(TypedDict):
@@ -82,7 +82,7 @@ class PlanningState(AgentState[ResponseT]):
 
 ---
 
-## TODO 2: `_write_todos()` -- Tool 동작 함수
+## TODO 1: `_write_todos()` -- Tool 동작 함수
 
 ### 정답 코드
 
@@ -154,9 +154,9 @@ async def _awrite_todos(...) -> Command[Any]:
 
 ---
 
-## TODO 3: `WRITE_TODOS_TOOL_DESCRIPTION` -- Tool 설명
+## 사전 제공 코드 해설: `WRITE_TODOS_TOOL_DESCRIPTION` -- Tool 설명
 
-### 정답 코드
+### 코드
 
 ```python
 WRITE_TODOS_TOOL_DESCRIPTION = """Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
@@ -271,7 +271,7 @@ write_todos([
 
 ---
 
-## TODO 4: `TodoListMiddleware.__init__()` -- 3가지 축 조립
+## TODO 2: `TodoListMiddleware.__init__()` -- 3가지 축 조립
 
 ### 정답 코드
 
@@ -358,7 +358,7 @@ TodoListMiddleware("custom...")                # Error
 
 ---
 
-## TODO 5: `wrap_model_call()` -- Prompt 주입
+## TODO 3: `wrap_model_call()` -- Prompt 주입
 
 ### 정답 코드
 
@@ -437,7 +437,7 @@ return handler(request.override(system_message=new_system_message))
 
 # Part 2: Harness Prompting -- Coding Agent의 행동 규칙
 
-## TODO 6-8: PHASE 1/2/3 구체화
+## TODO 4-5: PHASE 2/3 구체화 (PHASE 1은 사전 제공)
 
 ### 정답 코드
 
@@ -529,7 +529,7 @@ CRITICAL: Steps 1 and 2 MUST use file tools (write_file/edit_file). Do NOT skip 
 
 ### 해설
 
-#### TODO 6: PHASE 1 -- 컨텍스트 해석 프로토콜
+#### 사전 제공: PHASE 1 -- 컨텍스트 해석 프로토콜
 
 ```
 1. Run `pwd` to see your working directory
@@ -552,7 +552,7 @@ CRITICAL: Steps 1 and 2 MUST use file tools (write_file/edit_file). Do NOT skip 
 
 `init.sh`는 Cold Start Recovery의 핵심입니다. 새 세션의 LLM은 이전 세션의 대화 내용을 전혀 모릅니다. 하지만 `init.sh`가 git log, progress.md, feature_list.json을 출력하면, LLM은 이 외부 상태를 읽고 현재 프로젝트 상황을 파악할 수 있습니다.
 
-#### TODO 7: PHASE 2 -- 작업 단위 격리
+#### TODO 4: PHASE 2 -- 작업 단위 격리
 
 ```
 1. Select ONE feature where passes=false
@@ -595,7 +595,7 @@ Only mark passes=true when test succeeds
 
 LLM은 코드를 작성한 후 "완료"라고 선언하는 경향이 있습니다. 하지만 코드 작성과 동작 확인은 다릅니다. 이 규칙이 E2E 테스트를 강제하여, 실제로 동작하는 코드만 "완료"로 표시되게 합니다.
 
-#### TODO 8: PHASE 3 -- Context 외부화
+#### TODO 5: PHASE 3 -- Context 외부화
 
 ```
 1. Update progress.md (write_file or edit_file)

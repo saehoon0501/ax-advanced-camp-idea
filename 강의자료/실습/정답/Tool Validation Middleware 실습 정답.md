@@ -1,6 +1,6 @@
 # Tool Validation Middleware 실습 정답
 
-이 문서는 `ax_advanced_class/src/middleware/tool_validation_middleware.py`의 4개 TODO에 대한 정답과 해설입니다.
+이 문서는 `ax_advanced_class/src/middleware/tool_validation_middleware.py`의 3개 TODO에 대한 정답과 해설입니다.
 
 ---
 
@@ -120,9 +120,9 @@ return min(results, key=lambda r: priority[r.level])
 
 ---
 
-## TODO 2: `validate_path()` -- 워크스페이스 경계 검증
+## 사전 제공 코드 해설: `validate_path()` -- 워크스페이스 경계 검증
 
-### 정답 코드
+### 코드
 
 ```python
 def validate_path(self, path: str, is_write: bool = True) -> CommandValidationResult:
@@ -235,7 +235,7 @@ else:
 
 ---
 
-## TODO 3: `wrap_tool_call()` Bash 블록 -- interrupt + always-allow
+## TODO 2: `wrap_tool_call()` Bash 블록 -- interrupt + always-allow
 
 ### 정답 코드
 
@@ -356,7 +356,7 @@ elif not response or (isinstance(response, str) and response.startswith("deny:")
 
 ---
 
-## TODO 4: `wrap_tool_call()` 파일 블록 -- Read-before-Write + Stale 감지
+## TODO 3: `wrap_tool_call()` 파일 블록 -- Read-before-Write + Stale 감지
 
 ### 정답 코드
 

@@ -163,6 +163,12 @@ Workspace: ???
 (All file operations should be relative to this directory)
 
 todos: ???
+
+# TODO: Add write_todos usage guide here
+# Remind the agent:
+#   - Create a todo list before starting work
+#   - Only 1 task in_progress at a time
+#   - Update status immediately upon completion
 """
 
     # TODO 2: Determine the prompt synthesis order

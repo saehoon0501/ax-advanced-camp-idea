@@ -2,11 +2,11 @@
 
 **구현 파일:** `ax_advanced_class/src/orchestrator.py`
 
-이 문서는 Orchestrator 실습의 6개 TODO에 대한 정답 코드와 상세 해설을 제공합니다.
+이 문서는 Orchestrator 실습의 4개 TODO에 대한 정답 코드와 상세 해설을 제공합니다.
 
 ---
 
-## TODO 1: OrchestratorState 정의
+## 사전 제공 코드 해설: OrchestratorState 정의
 
 **개념:** State + Reducer
 
@@ -31,7 +31,7 @@ class OrchestratorState(TypedDict, total=False):
 
 ---
 
-## TODO 2: RouterDecision 정의
+## 사전 제공 코드 해설: RouterDecision 정의
 
 **개념:** with_structured_output + Pydantic
 
@@ -65,7 +65,7 @@ class RouterDecision(BaseModel):
 
 ---
 
-## TODO 3: _build_workflow() 구현
+## TODO 1: _build_workflow() 구현
 
 **개념:** StateGraph 조립
 
@@ -123,7 +123,7 @@ START -> router -> (조건에 따라) -> initializer -> END
 
 ---
 
-## TODO 4: _router_node() 구현
+## TODO 2: _router_node() 구현
 
 **개념:** Structured Output + 메시지 생성
 
@@ -174,12 +174,12 @@ def _router_node(self, state: OrchestratorState) -> dict:
 - **응답 메시지 구성**: `decision.response`가 있으면(일반 질문에 대한 직접 응답) 그것을 사용하고, 없으면 라우팅 이유를 메시지로 포함합니다.
 
 - **반환값**: `{"next_agent": route, "messages": [AIMessage(...)]}`
-  - `next_agent`는 Reducer가 없으므로 덮어쓰기됩니다 (TODO 1 참조).
+  - `next_agent`는 Reducer가 없으므로 덮어쓰기됩니다 (OrchestratorState 참조).
   - `messages`는 `operator.add` Reducer에 의해 기존 리스트에 추가됩니다.
 
 ---
 
-## TODO 5: _route_decision() 구현
+## TODO 3: _route_decision() 구현
 
 **개념:** Conditional Edge 분기 함수
 
@@ -190,7 +190,7 @@ def _route_decision(self, state: OrchestratorState) -> AgentRoute:
 
 **해설:**
 
-- 이 함수는 TODO 3의 `add_conditional_edges`에서 분기 함수로 사용됩니다.
+- 이 함수는 TODO 1의 `add_conditional_edges`에서 분기 함수로 사용됩니다.
 
 - **역할**: State에서 `next_agent` 값을 꺼내서 반환합니다. 이 반환값이 매핑 dict의 키와 매칭되어 다음 노드가 결정됩니다.
 
@@ -201,7 +201,7 @@ def _route_decision(self, state: OrchestratorState) -> AgentRoute:
 
 ---
 
-## TODO 6: _coding_node() 구현
+## TODO 4: _coding_node() 구현
 
 **개념:** 에이전트-노드 연결 패턴 + Context 격리
 
