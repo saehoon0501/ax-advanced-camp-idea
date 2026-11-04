@@ -377,7 +377,7 @@ These fail because terminal doesn't support input:
 ### My Actual Behavior: Soft Sandbox
 
 ```
-Workspace: /Users/sehoonbyun/Documents/ax-incubation-advanced-camp-idea-dexter
+Workspace: /path/to/ax-advanced-camp-idea
 
 ┌─────────────────────────────────────────────────────────────┐
 │                    INSIDE WORKSPACE                          │
@@ -631,7 +631,7 @@ My prompt includes runtime environment info:
 ```
 "Here is useful information about the environment you are running in:
 <env>
-Working directory: /Users/sehoonbyun/Documents/ax-incubation-advanced-camp-idea-dexter
+Working directory: /path/to/ax-advanced-camp-idea
 Is directory a git repo: Yes
 Platform: darwin
 OS Version: Darwin 24.2.0

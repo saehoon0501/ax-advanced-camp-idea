@@ -43,7 +43,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ax-incubation-advanced-camp-idea-dexter"
+name = "ax-advanced-camp-idea"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
