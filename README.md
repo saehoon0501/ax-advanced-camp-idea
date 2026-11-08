@@ -1,5 +1,8 @@
 # Context Engineering 실습 시나리오: Long-Running Coding Agents
 
+> **Note:** This is an earlier version of the teaching codebase for an AI-agent engineering camp I designed and taught; the program as delivered was a later revision.
+> 이 저장소는 제가 설계·강의한 AI Agent 엔지니어링 캠프 교육용 코드베이스의 초기 버전입니다. 실제 강의에서는 이후 수정된 버전을 사용했습니다.
+
 ## 📋 Overview
 
 이 프로젝트는 [Anthropic의 "Effective harnesses for long-running agents"](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) 아티클을 기반으로, **복잡한 웹 애플리케이션을 여러 세션에 걸쳐 점진적으로 구축하는 AI 에이전트 시스템**을 학습합니다.
